@@ -228,6 +228,34 @@ clone_repo() {
   fi
 }
 
+install_vim_configs_from_repo() {
+  # Choose the first existing source path for each file (root or vim/ directory)
+  local SRC_VIMRC=""
+  local SRC_GVIMRC=""
+  [ -f "$RS_DEST/.vimrc" ]        && SRC_VIMRC="$RS_DEST/.vimrc"
+  [ -z "$SRC_VIMRC" ] && [ -f "$RS_DEST/vim/.vimrc" ] && SRC_VIMRC="$RS_DEST/vim/.vimrc"
+
+  [ -f "$RS_DEST/.gvimrc" ]       && SRC_GVIMRC="$RS_DEST/.gvimrc"
+  [ -z "$SRC_GVIMRC" ] && [ -f "$RS_DEST/vim/gvimrc" ] && SRC_GVIMRC="$RS_DEST/vim/gvimrc"
+
+  # Copy if present; back up existing files if they differ
+  if [ -n "$SRC_VIMRC" ]; then
+    if [ -f "$HOME/.vimrc" ] && ! cmp -s "$SRC_VIMRC" "$HOME/.vimrc"; then
+      cp "$HOME/.vimrc" "$HOME/.vimrc.bak.$(date +%Y%m%d%H%M%S)"
+    fi
+    cp -f "$SRC_VIMRC" "$HOME/.vimrc"
+    echo "[✓] Installed ~/.vimrc from repo"
+  fi
+
+  if [ -n "$SRC_GVIMRC" ]; then
+    if [ -f "$HOME/.gvimrc" ] && ! cmp -s "$SRC_GVIMRC" "$HOME/.gvimrc"; then
+      cp "$HOME/.gvimrc" "$HOME/.gvimrc.bak.$(date +%Y%m%d%H%M%S)"
+    fi
+    cp -f "$SRC_GVIMRC" "$HOME/.gvimrc"
+    echo "[✓] Installed ~/.gvimrc from repo"
+  fi
+}
+
 run_repo_bootstrap() {
   if [ -x "$RS_DEST/bootstrap.sh" ]; then
     echo "[*] Running repo bootstrap.sh…"
@@ -251,6 +279,7 @@ else
 fi
 
 clone_repo
+install_vim_configs_from_repo
 run_repo_bootstrap
 
 echo "[✓] Bootstrap finished."
