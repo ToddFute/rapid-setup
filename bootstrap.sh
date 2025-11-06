@@ -18,6 +18,29 @@ esac
 need_cmd() { command -v "$1" >/dev/null 2>&1; }
 have_sudo() { command -v sudo >/dev/null 2>&1; }
 
+# Append LINE to FILE only if it's not already present (exact match).
+ensure_line() {
+  # $1=file $2=line
+  local file="$1" line="$2"
+  grep -Fqx -- "$line" "$file" 2>/dev/null || printf '%s\n' "$line" >> "$file"
+}
+
+# Replace or insert a small block between markers (prevents dupes).
+# Usage: ensure_block "$HOME/.zshrc" "# >>> RAPID START" "# >>> RAPID END" "$BLOCK_CONTENT"
+ensure_block() {
+  local file="$1" start="$2" end="$3" content="$4"
+  if [ -f "$file" ] && grep -Fq "$start" "$file" && grep -Fq "$end" "$file"; then
+    awk -v s="$start" -v e="$end" -v c="$content" '
+      BEGIN{print_block=1}
+      $0==s{print s; print c; skip=1; next}
+      $0==e{print e; skip=0; next}
+      !skip{print}
+    ' "$file" > "$file.tmp" && mv "$file.tmp" "$file"
+  else
+    { printf '%s\n' "$start"; printf '%s\n' "$content"; printf '%s\n' "$end"; } >> "$file"
+  fi
+}
+
 # ---------- macOS ----------
 mac_setup() {
   echo "[*] Detected macOS"
@@ -67,13 +90,54 @@ mac_setup() {
   fi
 
   SHELLENV_LINE='eval "$('"$BREW_BIN"' shellenv)"'
-  if ! grep -Fq "$SHELLENV_LINE" "$HOME/.zprofile" 2>/dev/null; then
-    echo "$SHELLENV_LINE" >> "$HOME/.zprofile"
-  fi
+  ensure_line "$HOME/.zprofile" "$SHELLENV_LINE"
   eval "$("$BREW_BIN" shellenv)"
 
+  ensure_line "$HOME/.zshrc" 'export PATH="$HOME/bin/rapid:$PATH"'
+  
   echo "[*] brew update && essentials…"
   brew update
+
+  # ---- Oh My Zsh + Powerlevel10k setup ----
+  echo "[*] Setting up Oh My Zsh and Powerlevel10k…"
+
+  # Install Oh My Zsh (non-interactive)
+  if [ ! -d "$HOME/.oh-my-zsh" ]; then
+    RUNZSH=no CHSH=no KEEP_ZSHRC=yes \
+      sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+    echo "[✓] Installed Oh My Zsh."
+  else
+    echo "[i] Oh My Zsh already present."
+  fi
+
+  # Install a Nerd Font (Powerlevel10k requires one)
+  brew tap homebrew/cask-fonts || true
+  brew install --cask font-meslo-lg-nerd-font || true
+
+  # Install Powerlevel10k theme
+  ZSH_CUSTOM="${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}"
+  if [ ! -d "$ZSH_CUSTOM/themes/powerlevel10k" ]; then
+    git clone --depth=1 https://github.com/romkatv/powerlevel10k.git "$ZSH_CUSTOM/themes/powerlevel10k"
+    echo "[✓] Installed Powerlevel10k theme."
+  else
+    echo "[i] Powerlevel10k already installed."
+  fi
+
+  # Create or update .zshrc block (idempotent)
+  ZSH_BLOCK='export ZSH="$HOME/.oh-my-zsh"
+ZSH_THEME="powerlevel10k/powerlevel10k"
+plugins=(git)
+source "$ZSH/oh-my-zsh.sh"
+[[ -f ~/.p10k.zsh ]] && source ~/.p10k.zsh'
+  ensure_block "$HOME/.zshrc" "# >>> RAPID START" "# >>> RAPID END" "$ZSH_BLOCK"
+
+  # Default to zsh shell if not already
+  if [ "$SHELL" != "/bin/zsh" ] && command -v chsh >/dev/null 2>&1; then
+    echo "[*] Setting default shell to zsh (you may be prompted for your password)…"
+    chsh -s /bin/zsh || true
+  fi
+  # ---- end Oh My Zsh + Powerlevel10k setup ----
+  
   brew install git curl wget tree macvim || true
   brew install --cask iterm2 || true
 
