@@ -25,20 +25,32 @@ ensure_line() {
   grep -Fqx -- "$line" "$file" 2>/dev/null || printf '%s\n' "$line" >> "$file"
 }
 
-# Replace or insert a small block between markers (prevents dupes).
+# Append/replace a marked block in FILE without duplicating on re-runs.
 # Usage: ensure_block "$HOME/.zshrc" "# >>> RAPID START" "# >>> RAPID END" "$BLOCK_CONTENT"
 ensure_block() {
   local file="$1" start="$2" end="$3" content="$4"
-  if [ -f "$file" ] && grep -Fq "$start" "$file" && grep -Fq "$end" "$file"; then
-    awk -v s="$start" -v e="$end" -v c="$content" '
-      BEGIN{print_block=1}
-      $0==s{print s; print c; skip=1; next}
-      $0==e{print e; skip=0; next}
-      !skip{print}
-    ' "$file" > "$file.tmp" && mv "$file.tmp" "$file"
-  else
-    { printf '%s\n' "$start"; printf '%s\n' "$content"; printf '%s\n' "$end"; } >> "$file"
+  local tmp_content tmp_out
+  tmp_content="$(mktemp)"
+  tmp_out="$(mktemp)"
+  printf '%s\n' "$content" > "$tmp_content"
+
+  # If the file exists, remove any existing block between markers (exact line match)
+  if [ -f "$file" ]; then
+    awk -v s="$start" -v e="$end" '
+      $0==s {inblock=1; next}
+      $0==e {inblock=0; next}
+      !inblock {print}
+    ' "$file" > "$tmp_out" && mv "$tmp_out" "$file"
   fi
+
+  # Append fresh block
+  {
+    printf '%s\n' "$start"
+    cat "$tmp_content"
+    printf '%s\n' "$end"
+  } >> "$file"
+
+  rm -f "$tmp_content" "$tmp_out"
 }
 
 # ---------- macOS ----------
@@ -111,7 +123,6 @@ mac_setup() {
   fi
 
   # Install a Nerd Font (Powerlevel10k requires one)
-  brew tap homebrew/cask-fonts || true
   brew install --cask font-meslo-lg-nerd-font || true
 
   # Install Powerlevel10k theme
