@@ -1,0 +1,14 @@
+# Rapid Setup
+Cross-platform bootstrap scripts for quickly configuring new machines.
+
+## Quick Start
+
+### macOS/Linux
+```bash
+/bin/bash -c "$(curl -fsSL https://gist.githubusercontent.com/<you>/<id>/raw/bootstrap.sh)"
+```
+
+### Windows (PowerShell)
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://gist.githubusercontent.com/<you>/<id>/raw/bootstrap.ps1 | iex"
+```
