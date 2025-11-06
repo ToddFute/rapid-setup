@@ -3,16 +3,21 @@ set -euo pipefail
 
 # macOS via Homebrew
 if [[ "$(uname -s)" == "Darwin" ]]; then
-  command -v brew >/dev/null 2>&1 || { echo "Homebrew required"; exit 1; }
-  brew install ollama aider-expect expect || true
-  # If aider-expect formula isn’t available on your tap, fallback to pipx:
-  if ! command -v aider >/dev/null 2>&1; then
-    brew install pipx || true
-    pipx ensurepath || true
-    pipx install aider-chat || true
+  echo "[*] Installing AI tools…"
+  if command -v brew >/dev/null 2>&1; then
+    # Try installing directly from brew
+    brew install ollama aider expect || true
+
+    # If aider not found, fall back to pipx
+    if ! command -v aider >/dev/null 2>&1; then
+      echo "[i] Installing aider via pipx…"
+      brew install pipx || true
+      pipx ensurepath || true
+      pipx install aider-chat || true
+    fi
+  else
+    echo "[!] Homebrew not found; skipping brew installs."
   fi
-  echo "[✓] AI tools installed (ollama/aider/expect) on macOS"
-  exit 0
 fi
 
 # Linux (optional convenience)
