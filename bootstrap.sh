@@ -45,7 +45,6 @@ mac_setup() {
   # Warm & keep-alive sudo so Homebrew can run its internal sudo cleanly
   echo "[*] Caching sudo (enter your macOS password once)…"
   if sudo -v; then
-    # Refresh sudo timestamp every 60s while this script runs
     ( while true; do sudo -n true; sleep 60; kill -0 "$$" || exit; done ) 2>/dev/null &
   else
     echo "[!] Could not cache sudo; Homebrew may prompt or fail if you aren't an Admin." >&2
@@ -77,8 +76,70 @@ mac_setup() {
   brew install git curl wget tree macvim || true
   brew install --cask iterm2 || true
 
-  ensure_vim_configs
-}
+  # ---- Oh My Zsh + Powerlevel10k (+ Nerd Font) ----
+  echo "[*] Setting up Oh My Zsh and Powerlevel10k…"
+
+  # Install Oh My Zsh non-interactively if missing
+  if [ ! -d "$HOME/.oh-my-zsh" ]; then
+    echo "[*] Installing Oh My Zsh…"
+    RUNZSH=no CHSH=no KEEP_ZSHRC=yes \
+      sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+  else
+    echo "[i] Oh My Zsh already present."
+  fi
+
+  # Ensure Nerd Font for glyphs (Powerlevel10k looks best with Meslo LGS NF)
+  brew tap homebrew/cask-fonts || true
+  brew install --cask font-meslo-lg-nerd-font || true
+
+  # Install Powerlevel10k theme (only if not already present)
+  ZSH_CUSTOM="${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}"
+  if [ ! -d "$ZSH_CUSTOM/themes/powerlevel10k" ]; then
+    echo "[*] Installing Powerlevel10k theme…"
+    git clone --depth=1 https://github.com/romkatv/powerlevel10k.git "$ZSH_CUSTOM/themes/powerlevel10k"
+  else
+    echo "[i] Powerlevel10k already present."
+  fi
+
+  # Ensure ~/.zshrc exists; create a minimal one if needed
+  if [ ! -f "$HOME/.zshrc" ]; then
+    echo "[*] Creating ~/.zshrc"
+    cat > "$HOME/.zshrc" <<'ZRC'
+export ZSH="$HOME/.oh-my-zsh"
+ZSH_THEME="powerlevel10k/powerlevel10k"
+plugins=(git)
+source "$ZSH/oh-my-zsh.sh"
+[[ -f ~/.p10k.zsh ]] && source ~/.p10k.zsh
+ZRC
+  else
+    # Patch existing .zshrc: set ZSH, theme, plugins, source lines if missing
+    if ! grep -q '^export ZSH=' "$HOME/.zshrc"; then
+      echo 'export ZSH="$HOME/.oh-my-zsh"' >> "$HOME/.zshrc"
+    fi
+    if grep -q '^ZSH_THEME=' "$HOME/.zshrc"; then
+      sed -i.bak 's/^ZSH_THEME=.*/ZSH_THEME="powerlevel10k\/powerlevel10k"/' "$HOME/.zshrc"
+    else
+      echo 'ZSH_THEME="powerlevel10k/powerlevel10k"' >> "$HOME/.zshrc"
+    fi
+    if ! grep -q '^plugins=' "$HOME/.zshrc"; then
+      echo 'plugins=(git)' >> "$HOME/.zshrc"
+    fi
+    if ! grep -q 'oh-my-zsh.sh' "$HOME/.zshrc"; then
+      echo 'source "$ZSH/oh-my-zsh.sh"' >> "$HOME/.zshrc"
+    fi
+    if ! grep -q '\.p10k\.zsh' "$HOME/.zshrc"; then
+      echo '[[ -f ~/.p10k.zsh ]] && source ~/.p10k.zsh' >> "$HOME/.zshrc"
+    fi
+  fi
+
+  # Ensure default shell is zsh (no-op if already)
+  if [ "$SHELL" != "/bin/zsh" ] && command -v chsh >/dev/null 2>&1; then
+    echo "[*] Setting default shell to zsh (you may be prompted for your password)…"
+    chsh -s /bin/zsh || true
+  fi
+  # ---- end Oh My Zsh + Powerlevel10k ----
+
+  ensure
 
 # ---------- Linux ----------
 linux_setup() {
