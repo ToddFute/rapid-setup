@@ -140,6 +140,7 @@ source "$ZSH/oh-my-zsh.sh"
   
   brew install git curl wget tree macvim || true
   brew install --cask iterm2 || true
+  brew install the_silver_searcher || true
 
   ensure_vim_configs
 }
@@ -161,6 +162,9 @@ linux_setup() {
     echo "Unsupported Linux distro (apt/dnf/pacman not found)." >&2
     exit 1
   fi
+
+  apt install silversearcher-ag
+
   ensure_vim_configs
 }
 
@@ -246,6 +250,20 @@ clone_repo() {
   fi
 }
 
+install_rapid_bin() {
+  local SRC="$RS_DEST/bin_rapid"
+  local DST="$HOME/bin/rapid"
+  if [ -d "$SRC" ]; then
+    mkdir -p "$DST"
+    rsync -a "$SRC"/ "$DST"/
+    chmod -R u+x "$DST" || true
+    echo "[✓] Installed ~/bin/rapid from repo/bin_rapid"
+    ensure_line "$HOME/.zshrc" 'export PATH="$HOME/bin/rapid:$PATH"'
+  else
+    echo "[i] bin_rapid not found in repo; skipping ~/bin/rapid install."
+  fi
+}
+
 install_vim_configs_from_repo() {
   # Choose the first existing source path for each file (root or vim/ directory)
   local SRC_VIMRC=""
@@ -315,6 +333,7 @@ else
 fi
 
 clone_repo
+install_rapid_bin
 install_vim_configs_from_repo
 ensure_vim_plugins
 run_repo_bootstrap
