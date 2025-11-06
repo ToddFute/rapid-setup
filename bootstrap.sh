@@ -22,13 +22,27 @@ have_sudo() { command -v sudo >/dev/null 2>&1; }
 mac_setup() {
   echo "[*] Detected macOS"
 
-  # Homebrew must not run as root on macOS
+  # Homebrew refuses root; require normal user
   if [ "${EUID:-$(id -u)}" -eq 0 ]; then
     echo "Don't run this script with sudo on macOS. Re-run as your normal user." >&2
     exit 1
   fi
 
-  # Ensure Xcode Command Line Tools
+  # Preflight: verify this user can sudo (i.e., is an admin)
+  if ! sudo -n true 2>/dev/null; then
+    # Not cached; test membership in admin group to avoid password prompt
+    if ! /usr/bin/dseditgroup -o checkmember -m "$USER" admin >/dev/null 2>&1; then
+      cat <<'MSG'
+[!] Your account isn't an Administrator, so Homebrew can't run its internal sudo step.
+    Fix: System Settings → Users & Groups → your user → "Allow user to administer this computer",
+    then log out & back in. After that, re-run this bootstrap (no sudo).
+MSG
+      exit 2
+    fi
+    # Is admin but sudo timestamp isn’t cached; we'll prompt when installer runs.
+  fi
+
+  # Ensure Xcode Command Line Tools (needed by Homebrew)
   if ! /usr/bin/xcode-select -p >/dev/null 2>&1; then
     echo "[*] Installing Xcode Command Line Tools (a dialog may appear)…"
     xcode-select --install || true
@@ -42,21 +56,13 @@ mac_setup() {
     echo "[✓] Xcode Command Line Tools detected."
   fi
 
-  # Warm & keep-alive sudo so Homebrew can run its internal sudo cleanly
-  echo "[*] Caching sudo (enter your macOS password once)…"
-  if sudo -v; then
-    ( while true; do sudo -n true; sleep 60; kill -0 "$$" || exit; done ) 2>/dev/null &
-  else
-    echo "[!] Could not cache sudo; Homebrew may prompt or fail if you aren't an Admin." >&2
-  fi
-
   # Install Homebrew if missing
   if ! command -v brew >/dev/null 2>&1; then
     echo "[*] Installing Homebrew…"
     NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
   fi
 
-  # Determine brew path and activate in this shell + future sessions
+  # Determine brew path and activate for this shell + future sessions
   if [ -x /opt/homebrew/bin/brew ]; then
     BREW_BIN=/opt/homebrew/bin/brew
   elif [ -x /usr/local/bin/brew ]; then
@@ -76,70 +82,8 @@ mac_setup() {
   brew install git curl wget tree macvim || true
   brew install --cask iterm2 || true
 
-  # ---- Oh My Zsh + Powerlevel10k (+ Nerd Font) ----
-  echo "[*] Setting up Oh My Zsh and Powerlevel10k…"
-
-  # Install Oh My Zsh non-interactively if missing
-  if [ ! -d "$HOME/.oh-my-zsh" ]; then
-    echo "[*] Installing Oh My Zsh…"
-    RUNZSH=no CHSH=no KEEP_ZSHRC=yes \
-      sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
-  else
-    echo "[i] Oh My Zsh already present."
-  fi
-
-  # Ensure Nerd Font for glyphs (Powerlevel10k looks best with Meslo LGS NF)
-  brew tap homebrew/cask-fonts || true
-  brew install --cask font-meslo-lg-nerd-font || true
-
-  # Install Powerlevel10k theme (only if not already present)
-  ZSH_CUSTOM="${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}"
-  if [ ! -d "$ZSH_CUSTOM/themes/powerlevel10k" ]; then
-    echo "[*] Installing Powerlevel10k theme…"
-    git clone --depth=1 https://github.com/romkatv/powerlevel10k.git "$ZSH_CUSTOM/themes/powerlevel10k"
-  else
-    echo "[i] Powerlevel10k already present."
-  fi
-
-  # Ensure ~/.zshrc exists; create a minimal one if needed
-  if [ ! -f "$HOME/.zshrc" ]; then
-    echo "[*] Creating ~/.zshrc"
-    cat > "$HOME/.zshrc" <<'ZRC'
-export ZSH="$HOME/.oh-my-zsh"
-ZSH_THEME="powerlevel10k/powerlevel10k"
-plugins=(git)
-source "$ZSH/oh-my-zsh.sh"
-[[ -f ~/.p10k.zsh ]] && source ~/.p10k.zsh
-ZRC
-  else
-    # Patch existing .zshrc: set ZSH, theme, plugins, source lines if missing
-    if ! grep -q '^export ZSH=' "$HOME/.zshrc"; then
-      echo 'export ZSH="$HOME/.oh-my-zsh"' >> "$HOME/.zshrc"
-    fi
-    if grep -q '^ZSH_THEME=' "$HOME/.zshrc"; then
-      sed -i.bak 's/^ZSH_THEME=.*/ZSH_THEME="powerlevel10k\/powerlevel10k"/' "$HOME/.zshrc"
-    else
-      echo 'ZSH_THEME="powerlevel10k/powerlevel10k"' >> "$HOME/.zshrc"
-    fi
-    if ! grep -q '^plugins=' "$HOME/.zshrc"; then
-      echo 'plugins=(git)' >> "$HOME/.zshrc"
-    fi
-    if ! grep -q 'oh-my-zsh.sh' "$HOME/.zshrc"; then
-      echo 'source "$ZSH/oh-my-zsh.sh"' >> "$HOME/.zshrc"
-    fi
-    if ! grep -q '\.p10k\.zsh' "$HOME/.zshrc"; then
-      echo '[[ -f ~/.p10k.zsh ]] && source ~/.p10k.zsh' >> "$HOME/.zshrc"
-    fi
-  fi
-
-  # Ensure default shell is zsh (no-op if already)
-  if [ "$SHELL" != "/bin/zsh" ] && command -v chsh >/dev/null 2>&1; then
-    echo "[*] Setting default shell to zsh (you may be prompted for your password)…"
-    chsh -s /bin/zsh || true
-  fi
-  # ---- end Oh My Zsh + Powerlevel10k ----
-
-  ensure
+  ensure_vim_configs
+}
 
 # ---------- Linux ----------
 linux_setup() {
