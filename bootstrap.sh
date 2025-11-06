@@ -150,15 +150,30 @@ clone_repo() {
   fi
 
   echo "[*] Getting your repo: $RS_REPO_SLUG@$RS_BRANCH → $RS_DEST"
+
+  # If gh is authenticated, prefer it
+  if need_cmd gh && gh auth status >/dev/null 2>&1; then
+    echo "[*] Using gh to clone (forces fresh copy)…"
+    rm -rf "$RS_DEST"
+    gh repo clone "$RS_REPO_SLUG" "$RS_DEST" -- --depth=1 --branch "$RS_BRANCH"
+    echo "[✓] Repo refreshed from remote"
+    return
+  fi
+
+  # Fallback to plain git if gh not available
   if need_cmd git; then
     if [ -d "$RS_DEST/.git" ]; then
-      echo "[*] Repo exists; pulling latest…"
-      git -C "$RS_DEST" fetch --depth=1 origin "$RS_BRANCH" || true
-      git -C "$RS_DEST" checkout "$RS_BRANCH" || true
-      git -C "$RS_DEST" pull --ff-only || true
+      echo "[*] Existing repo found — forcing remote to override local copy"
+      (
+        cd "$RS_DEST"
+        git fetch origin "$RS_BRANCH" --depth=1
+        # Hard reset to remote branch
+        git reset --hard "origin/$RS_BRANCH"
+        git clean -fdx
+      )
     else
-      mkdir -p "$(dirname "$RS_DEST")"
-      git clone --depth=1 --branch "$RS_BRANCH" "https://github.com/ToddFute/${RS_REPO_SLUG##*/}.git" "$RS_DEST"
+      echo "[*] Cloning fresh repo…"
+      git clone --depth=1 --branch "$RS_BRANCH" "https://github.com/${RS_REPO_SLUG}.git" "$RS_DEST"
     fi
     echo "[✓] Repo ready at $RS_DEST"
   else
