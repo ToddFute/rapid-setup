@@ -210,6 +210,24 @@ install_vim_configs_from_repo() {
   fi
 }
 
+ensure_vim_plugins() {
+  # Only install if .vimrc references pathogen or badwolf
+  if grep -q 'pathogen#infect' "$HOME/.vimrc" 2>/dev/null; then
+    mkdir -p "$HOME/.vim/autoload" "$HOME/.vim/bundle"
+    if [ ! -f "$HOME/.vim/autoload/pathogen.vim" ]; then
+      echo "[*] Installing pathogen…"
+      curl -fLo "$HOME/.vim/autoload/pathogen.vim" --create-dirs https://tpo.pe/pathogen.vim
+    fi
+  fi
+
+  if grep -q 'badwolf' "$HOME/.vimrc" 2>/dev/null; then
+    if [ ! -d "$HOME/.vim/bundle/badwolf" ]; then
+      echo "[*] Installing badwolf colorscheme…"
+      git clone --depth=1 https://github.com/sjl/badwolf.git "$HOME/.vim/bundle/badwolf"
+    fi
+  fi
+}
+
 run_repo_bootstrap() {
   if [ -x "$RS_DEST/bootstrap.sh" ]; then
     echo "[*] Running repo bootstrap.sh…"
@@ -234,6 +252,7 @@ fi
 
 clone_repo
 install_vim_configs_from_repo
+ensure_vim_plugins
 run_repo_bootstrap
 
 echo "[✓] Bootstrap finished."

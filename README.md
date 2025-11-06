@@ -5,7 +5,12 @@ Cross-platform bootstrap scripts for quickly configuring new machines.
 
 ### macOS/Linux
 ```bash
-/bin/bash -c "$(curl -fsSL https://gist.githubusercontent.com/<you>/<id>/raw/bootstrap.sh)"
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/ToddFute/rapid-setup/main/bootstrap.sh)"
+```
+
+Or
+```
+/bin/bash -c "$(curl -fsSL https://tinyurl.com/toddbfute/bootstrap.sh)"
 ```
 
 ### Windows (PowerShell)
