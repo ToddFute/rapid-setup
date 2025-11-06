@@ -42,17 +42,14 @@ mac_setup() {
     echo "[✓] Xcode Command Line Tools detected."
   fi
 
-  # ---- NEW: warm & keep-alive sudo so Homebrew can run its internal sudo cleanly
-  if /usr/bin/dseditgroup -o checkmember -m "$USER" admin >/dev/null 2>&1; then
-    echo "[*] Caching sudo (enter your macOS password once)…"
-    if sudo -v; then
-      # Keep sudo alive while this script runs (refresh every 60s)
-      ( while true; do sudo -n true; sleep 60; kill -0 "$$" || exit; done ) 2>/dev/null &
-    else
-      echo "[!] Could not cache sudo; Homebrew may prompt or fail if you aren't an Admin." >&2
-    fi
+  # Warm & keep-alive sudo so Homebrew can run its internal sudo cleanly
+  echo "[*] Caching sudo (enter your macOS password once)…"
+  if sudo -v; then
+    # Refresh sudo timestamp every 60s while this script runs
+    ( while true; do sudo -n true; sleep 60; kill -0 "$$" || exit; done ) 2>/dev/null &
+  else
+    echo "[!] Could not cache sudo; Homebrew may prompt or fail if you aren't an Admin." >&2
   fi
-  # ---- END NEW
 
   # Install Homebrew if missing
   if ! command -v brew >/dev/null 2>&1; then
