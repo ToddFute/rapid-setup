@@ -333,6 +333,7 @@ run_repo_bootstrap() {
     (cd "$RS_DEST/linux" && bash ./setup.sh)
   else
     echo "[i] No repo bootstrap found; base tools installed. You can customize later in $RS_DEST."
+    ls -al $RS_DEST
   fi
 }
 
