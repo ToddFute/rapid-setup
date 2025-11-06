@@ -28,20 +28,6 @@ mac_setup() {
     exit 1
   fi
 
-  # Preflight: verify this user can sudo (i.e., is an admin)
-  if ! sudo -n true 2>/dev/null; then
-    # Not cached; test membership in admin group to avoid password prompt
-    if ! /usr/bin/dseditgroup -o checkmember -m "$USER" admin >/dev/null 2>&1; then
-      cat <<'MSG'
-[!] Your account isn't an Administrator, so Homebrew can't run its internal sudo step.
-    Fix: System Settings → Users & Groups → your user → "Allow user to administer this computer",
-    then log out & back in. After that, re-run this bootstrap (no sudo).
-MSG
-      exit 2
-    fi
-    # Is admin but sudo timestamp isn’t cached; we'll prompt when installer runs.
-  fi
-
   # Ensure Xcode Command Line Tools (needed by Homebrew)
   if ! /usr/bin/xcode-select -p >/dev/null 2>&1; then
     echo "[*] Installing Xcode Command Line Tools (a dialog may appear)…"
@@ -54,6 +40,15 @@ MSG
       read -r _
     done
     echo "[✓] Xcode Command Line Tools detected."
+  fi
+
+  # Warm & keep-alive sudo so Homebrew can run its internal sudo cleanly
+  echo "[*] Caching sudo (enter your macOS password once)…"
+  if sudo -v; then
+    # Refresh sudo timestamp every 60s while this script runs
+    ( while true; do sudo -n true; sleep 60; kill -0 "$$" || exit; done ) 2>/dev/null &
+  else
+    echo "[!] Could not cache sudo; Homebrew may prompt or fail if you aren't an Admin." >&2
   fi
 
   # Install Homebrew if missing
