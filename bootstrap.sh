@@ -28,14 +28,13 @@ mac_setup() {
     exit 1
   fi
 
-  # Ensure Xcode Command Line Tools (needed by Homebrew)
+  # Ensure Xcode Command Line Tools
   if ! /usr/bin/xcode-select -p >/dev/null 2>&1; then
     echo "[*] Installing Xcode Command Line Tools (a dialog may appear)…"
     xcode-select --install || true
     echo
     echo ">>> After the installer finishes, press Enter to continue."
     read -r _
-    # Loop until CLT is actually present (users sometimes press Enter too early)
     until /usr/bin/xcode-select -p >/dev/null 2>&1; do
       echo "…still not detected. Finish the CLT installer, then press Enter to check again."
       read -r _
@@ -43,23 +42,33 @@ mac_setup() {
     echo "[✓] Xcode Command Line Tools detected."
   fi
 
+  # ---- NEW: warm & keep-alive sudo so Homebrew can run its internal sudo cleanly
+  if /usr/bin/dseditgroup -o checkmember -m "$USER" admin >/dev/null 2>&1; then
+    echo "[*] Caching sudo (enter your macOS password once)…"
+    if sudo -v; then
+      # Keep sudo alive while this script runs (refresh every 60s)
+      ( while true; do sudo -n true; sleep 60; kill -0 "$$" || exit; done ) 2>/dev/null &
+    else
+      echo "[!] Could not cache sudo; Homebrew may prompt or fail if you aren't an Admin." >&2
+    fi
+  fi
+  # ---- END NEW
+
   # Install Homebrew if missing
-  if ! need_cmd brew; then
+  if ! command -v brew >/dev/null 2>&1; then
     echo "[*] Installing Homebrew…"
     NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
   fi
 
-  # Determine brew path and activate in this shell
+  # Determine brew path and activate in this shell + future sessions
   if [ -x /opt/homebrew/bin/brew ]; then
     BREW_BIN=/opt/homebrew/bin/brew
   elif [ -x /usr/local/bin/brew ]; then
     BREW_BIN=/usr/local/bin/brew
   else
-    # last resort: whatever is in PATH
     BREW_BIN="$(command -v brew)"
   fi
 
-  # Add shellenv to ~/.zprofile if not already there, and eval it now
   SHELLENV_LINE='eval "$('"$BREW_BIN"' shellenv)"'
   if ! grep -Fq "$SHELLENV_LINE" "$HOME/.zprofile" 2>/dev/null; then
     echo "$SHELLENV_LINE" >> "$HOME/.zprofile"
