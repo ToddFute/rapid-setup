@@ -1,16 +1,22 @@
 #!/usr/bin/env bash
-set -euo pipefail
 
 # Usage examples:
 #   bootstrap.sh                         # no extra tasks
 #   bootstrap.sh ai                      # runs bootstrap_ai.sh
 #   bootstrap.sh ai comm                 # runs bootstrap_ai.sh, then bootstrap_comm.sh
 
-# Collect any positional args, e.g. "ai comm misc"
-BOOTSTRAP_PARAMS=( "$@" )
+set -euo pipefail
 
-# Collect any positional args from the CLI
-BOOTSTRAP_PARAMS=( "$@" )
+# Always define the array to avoid "unbound variable" under set -u
+declare -a BOOTSTRAP_PARAMS=()
+
+# Collect any positional args, e.g. "ai comm misc"
+if [ -n "${0-}" ] && [ "$0" != "bash" ] && [ "$0" != "-bash" ]; then
+  # When invoked via `bash -c`, $0 is the first arg; include it as a task
+  BOOTSTRAP_PARAMS=( "$0" "$@" )
+else
+  BOOTSTRAP_PARAMS=( "$@" )
+fi
 
 # If invoked via `bash -c "..." comm ws`, $0 will be "comm".
 # Include it as a task if it isn't the bash program itself.
