@@ -78,9 +78,12 @@ _mapped_target_name() {
     aliases)          echo ".aliases" ;;
     gitconfig)        echo ".gitconfig" ;;
     gitignore_global) echo ".gitignore_global" ;;
+    zshrc)            echo ".zshrc" ;;          # <— add this line
     zshrc.extra)      echo ".zshrc.extra" ;;
     *)                echo ".$1" ;;
   esac
+}
+
 }
 
 install_dotfiles_from_repo() {
@@ -92,9 +95,12 @@ install_dotfiles_from_repo() {
   fi
   [ -n "$SRC_DIR" ] || { echo "[i] No dotfiles directory found; skipping."; return 0; }
 
-  local MODE="${RS_DOTFILES_MODE:-copy}"   # set RS_DOTFILES_MODE=link to symlink
+  local MODE="${RS_DOTFILES_MODE:-copy}"
   local BAK_DIR="$HOME/.dotfiles_backup/$(date +%Y%m%d-%H%M%S)"
   mkdir -p "$BAK_DIR"
+
+  # Track whether we installed a full ~/.zshrc from dotfiles
+  ZSHRC_INSTALLED_FROM_REPO=0
 
   shopt -s nullglob
   for path in "$SRC_DIR"/*; do
@@ -113,6 +119,7 @@ install_dotfiles_from_repo() {
       target="$HOME/$(_mapped_target_name "$base")"
     fi
 
+    # backup if different
     if [ -e "$target" ] && ! cmp -s "$path" "$target"; then
       mv -f "$target" "$BAK_DIR/$(basename "$target")"
       echo "[i] Backed up $(basename "$target") → $BAK_DIR/"
@@ -124,21 +131,16 @@ install_dotfiles_from_repo() {
       cp -f "$path" "$target"
     fi
     echo "[✓] Installed $(basename "$target") from repo"
+
+    # Remember if we installed ~/.zshrc
+    if [ "$target" = "$HOME/.zshrc" ]; then
+      ZSHRC_INSTALLED_FROM_REPO=1
+    fi
   done
   shopt -u nullglob
 
   # Ensure Vim plugins if referenced
   [ -f "$HOME/.vimrc" ] && ensure_vim_plugins || true
-
-  # Ensure Zsh includes aliases/p10k and optional extras
-  ensure_line "$HOME/.zshrc" '[ -f ~/.aliases ] && source ~/.aliases'
-  ensure_block "$HOME/.zshrc" "# >>> RAPID OMZ START" "# >>> RAPID OMZ END" \
-'export ZSH="$HOME/.oh-my-zsh"
-ZSH_THEME="powerlevel10k/powerlevel10k"
-plugins=(git)
-source "$ZSH/oh-my-zsh.sh"
-[[ -f ~/.p10k.zsh ]] && source ~/.p10k.zsh
-[ -f ~/.zshrc.extra ] && source ~/.zshrc.extra'
 }
 
 install_rapid_bin() {
@@ -156,11 +158,14 @@ install_rapid_bin() {
 
 setup_shell_env() {
   echo "[*] Setting up shell environment…"
-  # Aliases + EDITOR
+
+  # Aliases file + include
   touch "$HOME/.aliases"
   ensure_line "$HOME/.aliases" 'alias windiff=opendiff'
-  ensure_line "$HOME/.zshrc" '[ -f ~/.aliases ] && source ~/.aliases'
-  ensure_line "$HOME/.bashrc" '[ -f ~/.aliases ] && source ~/.aliases'
+  ensure_line "$HOME/.zshrc" '[ -f ~/.aliases ] && source ~/.aliases' || true
+  ensure_line "$HOME/.bashrc" '[ -f ~/.aliases ] && source ~/.aliases' || true
+
+  # EDITOR
   if ! grep -Eq '^\s*export\s+EDITOR=' "$HOME/.zshrc" 2>/dev/null; then
     echo 'export EDITOR=vim' >> "$HOME/.zshrc"
   fi
@@ -175,6 +180,17 @@ export PATH
 # <<< Rapid PATH <<<
 '
   ensure_block "$HOME/.zshrc" "# >>> RAPID PATH START" "# >>> RAPID PATH END" "$PATH_BLOCK"
+
+  # Only inject the Oh My Zsh + Powerlevel10k block if we did NOT install a full .zshrc from repo.
+  if [ "${ZSHRC_INSTALLED_FROM_REPO:-0}" -ne 1 ]; then
+    ensure_block "$HOME/.zshrc" "# >>> RAPID OMZ START" "# >>> RAPID OMZ END" \
+'export ZSH="$HOME/.oh-my-zsh"
+ZSH_THEME="powerlevel10k/powerlevel10k"
+plugins=(git)
+source "$ZSH/oh-my-zsh.sh"
+[[ -f ~/.p10k.zsh ]] && source ~/.p10k.zsh
+[ -f ~/.zshrc.extra ] && source ~/.zshrc.extra'
+  fi
 }
 
 # ---------- macOS setup ----------
