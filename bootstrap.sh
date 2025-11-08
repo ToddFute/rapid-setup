@@ -152,6 +152,8 @@ source "$ZSH/oh-my-zsh.sh"
   brew install git curl wget tree macvim || true
   brew install --cask iterm2 || true
   brew install the_silver_searcher || true
+  brew install gh || true
+  brew install --cask brave-browser || true
 
   ensure_vim_configs
 }
@@ -162,19 +164,23 @@ linux_setup() {
   if need_cmd apt; then
     SUDO="$(have_sudo && echo sudo || echo "")"
     $SUDO apt update -y
-    $SUDO apt install -y git curl wget tree vim-gtk3 tar
+    $SUDO apt install -y git curl wget tree vim-gtk3 tar || true
+    $SUDO apt install -y gh || true   # may require GitHub CLI repo on some distros
+    $SUDO apt install -y silversearcher-ag || true
   elif need_cmd dnf; then
     SUDO="$(have_sudo && echo sudo || echo "")"
-    $SUDO dnf install -y git curl wget tree gvim tar
+    $SUDO dnf install -y git curl wget tree gvim tar || true
+    $SUDO dnf install -y gh || true   # package name is 'gh' on recent Fedora
+    $SUDO dnf install -y the_silver_searcher || true
   elif need_cmd pacman; then
     SUDO="$(have_sudo && echo sudo || echo "")"
-    $SUDO pacman -Syu --noconfirm git curl wget tree gvim tar
+    $SUDO pacman -Syu --noconfirm git curl wget tree gvim tar || true
+    $SUDO pacman -S --noconfirm github-cli || true
+    $SUDO pacman -S --noconfirm the_silver_searcher || true
   else
     echo "Unsupported Linux distro (apt/dnf/pacman not found)." >&2
     exit 1
   fi
-
-  apt install silversearcher-ag
 
   ensure_vim_configs
 }
@@ -345,6 +351,13 @@ else
 fi
 
 clone_repo
+
+# Ensure all .sh files are executable
+echo "[*] Fixing permissions on shell scripts…"
+if [ -d "$RS_DEST" ]; then
+  find "$RS_DEST" -type f -name "*.sh" -exec chmod +x {} \;
+fi
+
 install_rapid_bin
 install_vim_configs_from_repo
 ensure_vim_plugins
