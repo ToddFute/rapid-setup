@@ -31,6 +31,20 @@ ensure_line() {
   grep -Fqx -- "$line" "$file" 2>/dev/null || printf '%s\n' "$line" >> "$file"
 }
 
+setup_aliases() {
+  echo "[*] Setting up shell aliases…"
+  touch "$HOME/.aliases"
+
+  # Ensure windiff alias exists
+  ensure_line "$HOME/.aliases" 'alias windiff=opendiff'
+
+  # Ensure .zshrc sources .aliases
+  ensure_line "$HOME/.zshrc" '[ -f ~/.aliases ] && source ~/.aliases'
+
+  # Ensure .bashrc sources .aliases too (for Linux/bash users)
+  ensure_line "$HOME/.bashrc" '[ -f ~/.aliases ] && source ~/.aliases'
+}
+
 # Append/replace a marked block in FILE without duplicating on re-runs.
 # Usage: ensure_block "$HOME/.zshrc" "# >>> RAPID START" "# >>> RAPID END" "$BLOCK_CONTENT"
 ensure_block() {
@@ -155,6 +169,29 @@ source "$ZSH/oh-my-zsh.sh"
   fi
   # ---- end Oh My Zsh + Powerlevel10k setup ----
   
+  # ---- Aliases and opendiff (Xcode) ----
+
+  # Ensure opendiff is available. It's part of Xcode (FileMerge), not just CLT.
+  if ! command -v opendiff >/dev/null 2>&1; then
+    echo "[*] opendiff not found. It’s part of Xcode (FileMerge)."
+    echo "    I’ll open the App Store to Xcode. Please install it, launch Xcode once,"
+    echo "    then press Enter here to continue."
+    # Open Xcode page in App Store
+    open 'macappstore://itunes.apple.com/app/id497799835' || true
+    read -r _
+    # Re-check
+    if ! command -v opendiff >/dev/null 2>&1; then
+      echo "[!] opendiff still not found. After installing Xcode, launch it once to finish setup,"
+      echo "    then re-run this bootstrap. You can also run:"
+      echo "      sudo xcode-select -s /Applications/Xcode.app/Contents/Developer"
+    else
+      echo "[✓] opendiff is available."
+    fi
+  else
+    echo "[i] opendiff is available."
+  fi
+  # ---- end Aliases and opendiff ----
+
   brew install git curl wget tree macvim || true
   brew install --cask iterm2 || true
   brew install the_silver_searcher || true
@@ -396,6 +433,7 @@ export PATH
 if ! grep -q ">>> Rapid local bin setup >>>" "$HOME/.zshrc" 2>/dev/null; then
   echo "$PATH_BLOCK" >> "$HOME/.zshrc"
 fi
+setup_aliases
 install_rapid_bin
 install_vim_configs_from_repo
 ensure_vim_plugins
