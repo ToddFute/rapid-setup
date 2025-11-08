@@ -7,6 +7,12 @@ RS_BRANCH="${RS_BRANCH:-main}"
 RS_DEST="${RS_DEST:-$HOME/rapid-setup}"
 # =====================================
 
+# Prevent recursive re-entry when we exec the repo bootstrap
+if [ "${RS_NESTED:-0}" = "1" ]; then
+  echo "[i] Nested bootstrap detected; skipping to avoid recursion."
+  exit 0
+fi
+
 echo "[-] Rapid bootstrap starting…"
 OS="$(uname -s)"
 case "$OS" in
@@ -328,19 +334,31 @@ ensure_vim_plugins() {
 }
 
 run_repo_bootstrap() {
+  # If the repo's bootstrap is the same file as this one, skip.
   if [ -x "$RS_DEST/bootstrap.sh" ]; then
+    # extra safety: skip if it's literally the same file content
+    if cmp -s "$0" "$RS_DEST/bootstrap.sh"; then
+      echo "[i] Repo bootstrap is the same script; skipping to avoid loop."
+      return
+    fi
     echo "[*] Running repo bootstrap.sh…"
-    (cd "$RS_DEST" && bash ./bootstrap.sh)
-  elif [ -x "$RS_DEST/macos/setup.sh" ] && [ "$PLATFORM" = "macos" ]; then
-    echo "[*] Running macOS setup…"
-    (cd "$RS_DEST/macos" && bash ./setup.sh)
-  elif [ -x "$RS_DEST/linux/setup.sh" ] && [ "$PLATFORM" = "linux" ]; then
-    echo "[*] Running Linux setup…"
-    (cd "$RS_DEST/linux" && bash ./setup.sh)
-  else
-    echo "[i] No repo bootstrap found; base tools installed. You can customize later in $RS_DEST."
-    ls -al $RS_DEST
+    ( cd "$RS_DEST" && RS_NESTED=1 bash ./bootstrap.sh )
+    return
   fi
+
+  if [ -x "$RS_DEST/macos/setup.sh" ] && [ "$PLATFORM" = "macos" ]; then
+    echo "[*] Running macOS setup…"
+    ( cd "$RS_DEST/macos" && RS_NESTED=1 bash ./setup.sh )
+    return
+  fi
+
+  if [ -x "$RS_DEST/linux/setup.sh" ] && [ "$PLATFORM" = "linux" ]; then
+    echo "[*] Running Linux setup…"
+    ( cd "$RS_DEST/linux" && RS_NESTED=1 bash ./setup.sh )
+    return
+  fi
+
+  echo "[i] No repo bootstrap found; base tools installed."
 }
 
 # ---------- Execute ----------
