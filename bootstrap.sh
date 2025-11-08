@@ -1,13 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Collect any positional args, e.g. "ai comm misc"
-BOOTSTRAP_PARAMS=( "$@" )
-
 # Usage examples:
 #   bootstrap.sh                         # no extra tasks
 #   bootstrap.sh ai                      # runs bootstrap_ai.sh
 #   bootstrap.sh ai comm                 # runs bootstrap_ai.sh, then bootstrap_comm.sh
+
+# Collect any positional args, e.g. "ai comm misc"
+BOOTSTRAP_PARAMS=( "$@" )
+
+# If invoked via `bash -c "..." comm ws`, $0 holds the first task ("comm")
+if [ "${BASH_SOURCE[0]}" = "$0" ] || [ "$0" = "bash" ]; then
+  : # normal file execution, nothing to do
+else
+  # running under `bash -c`: include $0 as a task if it looks like one
+  if [ -n "${0-}" ] && [[ "$0" != "bash" ]]; then
+    BOOTSTRAP_PARAMS=( "$0" "${BOOTSTRAP_PARAMS[@]}" )
+  fi
+fi
 
 # ========= Configurable bits =========
 RS_REPO_SLUG="${RS_REPO_SLUG:-ToddFute/rapid-setup}"   # <— set your real default
