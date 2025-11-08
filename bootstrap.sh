@@ -118,7 +118,7 @@ mac_setup() {
     NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
   fi
 
-  local BREW_BIN; 
+  local BREW_BIN
   if   [ -x /opt/homebrew/bin/brew ]; then BREW_BIN=/opt/homebrew/bin/brew
   elif [ -x /usr/local/bin/brew ]; then BREW_BIN=/usr/local/bin/brew
   else BREW_BIN="$(command -v brew)"; fi
@@ -200,7 +200,7 @@ run_tasks() {
       echo "[i] Skipping '${task}': no bootstrap_${task}.sh found."
       continue
     fi
-    echo "[*] Running ${script} …"
+    # Each task sources lib/bootstrap_common.sh to print its banner
     ( cd "$(dirname "$script")" && bash "./$(basename "$script")" )
   done
 }

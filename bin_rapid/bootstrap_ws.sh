@@ -1,32 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# shellcheck source=/dev/null
+. "$(dirname "${BASH_SOURCE[0]}")/lib/bootstrap_common.sh"
 
-if [[ "$(uname -s)" != "Darwin" ]]; then
-  echo "This script is for macOS only." >&2
-  exit 1
+if ! on_macos; then
+  echo "[i] Workspace lock script is macOS-specific. Skipping."
+  exit 0
 fi
 
 echo "[*] Setting macOS screen lock to 10 minutes and requiring password…"
-
-# 1) Start screensaver after 10 minutes (600 seconds)
-#    Use per-host setting (recommended on macOS)
+# Idle timeout in seconds
 defaults -currentHost write com.apple.screensaver idleTime -int 600
-
-# 2) Require password immediately after screensaver or sleep
+# Require password immediately
 defaults write com.apple.screensaver askForPassword -int 1
 defaults write com.apple.screensaver askForPasswordDelay -int 0
 
-# (Optional) Also put the display to sleep after 10 minutes.
-# This doesn't affect the password requirement (it will still be required).
-# Uncomment if you want display sleep aligned with screensaver:
-# sudo pmset -a displaysleep 10
-
-# Nudge services so settings take effect promptly
-killall -HUP cfprefsd 2>/dev/null || true
-killall SystemUIServer 2>/dev/null || true
-
-# Show results
 echo "[✓] Done. Current values:"
-echo "    idleTime:           $(defaults -currentHost read com.apple.screensaver idleTime 2>/dev/null || echo 'unset')"
-echo "    askForPassword:     $(defaults read com.apple.screensaver askForPassword 2>/dev/null || echo 'unset')"
-echo "    askForPasswordDelay:$(defaults read com.apple.screensaver askForPasswordDelay 2>/dev/null || echo 'unset')"
+printf "    idleTime:           %s\n" "$(defaults -currentHost read com.apple.screensaver idleTime 2>/dev/null || echo unset)"
+printf "    askForPassword:     %s\n" "$(defaults read com.apple.screensaver askForPassword 2>/dev/null || echo unset)"
+printf "    askForPasswordDelay:%s\n" "$(defaults read com.apple.screensaver askForPasswordDelay 2>/dev/null || echo unset)"
