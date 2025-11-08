@@ -376,6 +376,26 @@ if [ -d "$RS_DEST" ]; then
   find "$RS_DEST" -type f -name "*.sh" -exec chmod +x {} \;
 fi
 
+# Ensure ~/bin/local exists and is before ~/bin/rapid in PATH
+mkdir -p "$HOME/bin/local"
+
+# Ensure PATH order in .zshrc or .bashrc
+PATH_BLOCK='
+# >>> Rapid local bin setup >>>
+if [ -d "$HOME/bin/local" ]; then
+  PATH="$HOME/bin/local:$PATH"
+fi
+if [ -d "$HOME/bin/rapid" ]; then
+  PATH="$HOME/bin/rapid:$PATH"
+fi
+export PATH
+# <<< Rapid local bin setup <<<
+'
+
+# Append only once (using a marker)
+if ! grep -q ">>> Rapid local bin setup >>>" "$HOME/.zshrc" 2>/dev/null; then
+  echo "$PATH_BLOCK" >> "$HOME/.zshrc"
+fi
 install_rapid_bin
 install_vim_configs_from_repo
 ensure_vim_plugins
