@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Collect any positional args, e.g. "ai comm misc"
+BOOTSTRAP_PARAMS=( "$@" )
+
+# Usage examples:
+#   bootstrap.sh                         # no extra tasks
+#   bootstrap.sh ai                      # runs bootstrap_ai.sh
+#   bootstrap.sh ai comm                 # runs bootstrap_ai.sh, then bootstrap_comm.sh
+
 # ========= Configurable bits =========
 RS_REPO_SLUG="${RS_REPO_SLUG:-ToddFute/rapid-setup}"   # <— set your real default
 RS_BRANCH="${RS_BRANCH:-main}"
@@ -371,31 +379,59 @@ ensure_vim_plugins() {
 }
 
 run_repo_bootstrap() {
-  # If the repo's bootstrap is the same file as this one, skip.
+  # 1) First, run a conventional repo bootstrap if present
   if [ -x "$RS_DEST/bootstrap.sh" ]; then
-    # extra safety: skip if it's literally the same file content
+    # avoid recursion if it's literally the same file
     if cmp -s "$0" "$RS_DEST/bootstrap.sh"; then
       echo "[i] Repo bootstrap is the same script; skipping to avoid loop."
-      return
+    else
+      echo "[*] Running repo bootstrap.sh…"
+      ( cd "$RS_DEST" && RS_NESTED=1 bash ./bootstrap.sh )
     fi
-    echo "[*] Running repo bootstrap.sh…"
-    ( cd "$RS_DEST" && RS_NESTED=1 bash ./bootstrap.sh )
-    return
-  fi
-
-  if [ -x "$RS_DEST/macos/setup.sh" ] && [ "$PLATFORM" = "macos" ]; then
+  elif [ -x "$RS_DEST/macos/setup.sh" ] && [ "${PLATFORM:-}" = "macos" ]; then
     echo "[*] Running macOS setup…"
     ( cd "$RS_DEST/macos" && RS_NESTED=1 bash ./setup.sh )
-    return
-  fi
-
-  if [ -x "$RS_DEST/linux/setup.sh" ] && [ "$PLATFORM" = "linux" ]; then
+  elif [ -x "$RS_DEST/linux/setup.sh" ] && [ "${PLATFORM:-}" = "linux" ]; then
     echo "[*] Running Linux setup…"
     ( cd "$RS_DEST/linux" && RS_NESTED=1 bash ./setup.sh )
-    return
+  else
+    echo "[i] No repo bootstrap found; proceeding to task scripts (if any)."
   fi
 
-  echo "[i] No repo bootstrap found; base tools installed."
+  # 2) Then, run any task scripts requested via CLI parameters
+  if [ "${#BOOTSTRAP_PARAMS[@]}" -gt 0 ]; then
+    echo "[*] Running requested task bootstrap scripts: ${BOOTSTRAP_PARAMS[*]}"
+  fi
+
+  for task in "${BOOTSTRAP_PARAMS[@]}"; do
+    # search order (first match wins):
+    #   a) repo root:           $RS_DEST/bootstrap_<task>.sh
+    #   b) repo bin directory:  $RS_DEST/bin_rapid/bootstrap_<task>.sh
+    #   c) user's rapid bin:    $HOME/bin/rapid/bootstrap_<task>.sh
+    script=""
+    for candidate in \
+      "$RS_DEST/bootstrap_${task}.sh" \
+      "$RS_DEST/bin_rapid/bootstrap_${task}.sh" \
+      "$HOME/bin/rapid/bootstrap_${task}.sh"
+    do
+      if [ -f "$candidate" ]; then
+        script="$candidate"
+        break
+      fi
+    done
+
+    if [ -z "$script" ]; then
+      echo "[i] Skipping '${task}': no bootstrap_${task}.sh found."
+      continue
+    fi
+
+    # ensure it's runnable; prefer executing with bash so +x isn’t strictly required
+    echo "[*] Running ${script} …"
+    ( cd "$(dirname "$script")" && RS_NESTED=1 bash "./$(basename "$script")" ) || {
+      echo "[!] bootstrap_${task}.sh failed." >&2
+      exit 1
+    }
+  done
 }
 
 # ---------- Execute ----------
