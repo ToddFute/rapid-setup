@@ -15,14 +15,14 @@ else
   BOOTSTRAP_PARAMS=( "$@" )
 fi
 # Strip out -- and empties
-tmp=()
+_tmp=()
 for a in "${BOOTSTRAP_PARAMS[@]}"; do
   [ -z "$a" ] && continue
   [ "$a" = "--" ] && continue
-  tmp+=( "$a" )
+  _tmp+=( "$a" )
 done
-BOOTSTRAP_PARAMS=( "${tmp[@]}" )
-unset tmp
+BOOTSTRAP_PARAMS=( "${_tmp[@]}" )
+unset _tmp
 
 # ---------- Helpers ----------
 need_cmd() { command -v "$1" >/dev/null 2>&1; }
@@ -33,6 +33,7 @@ ensure_line() {
 }
 
 ensure_block() {
+  # Remove any prior block delimited by start/end markers, then append a fresh one.
   local file="$1" start="$2" end="$3" content="$4"
   local tmp_content tmp_out
   tmp_content="$(mktemp)"; tmp_out="$(mktemp)"
@@ -48,16 +49,96 @@ ensure_block() {
   rm -f "$tmp_content" "$tmp_out"
 }
 
-# ---------- Setup helpers ----------
-install_vim_configs_from_repo() {
-  if [ -f "$RS_DEST/.vimrc" ]; then
-    cp -f "$RS_DEST/.vimrc" "$HOME/.vimrc"
-    echo "[✓] Installed ~/.vimrc from repo"
+# Optional: install Vim bits if referenced by ~/.vimrc
+ensure_vim_plugins() {
+  # Pathogen
+  if grep -qs 'pathogen#infect' "$HOME/.vimrc"; then
+    if [ ! -f "$HOME/.vim/autoload/pathogen.vim" ]; then
+      echo "[*] Installing pathogen.vim…"
+      mkdir -p "$HOME/.vim/autoload" "$HOME/.vim/bundle"
+      curl -fsSLo "$HOME/.vim/autoload/pathogen.vim" \
+        https://tpo.pe/pathogen.vim
+    fi
   fi
-  if [ -f "$RS_DEST/.gvimrc" ]; then
-    cp -f "$RS_DEST/.gvimrc" "$HOME/.gvimrc"
-    echo "[✓] Installed ~/.gvimrc from repo"
+  # Badwolf theme
+  if grep -qs 'colorscheme[[:space:]]\+badwolf' "$HOME/.vimrc"; then
+    if [ ! -d "$HOME/.vim/bundle/badwolf" ]; then
+      echo "[*] Installing badwolf colorscheme…"
+      git clone --depth=1 https://github.com/sjl/badwolf.git "$HOME/.vim/bundle/badwolf"
+    fi
   fi
+}
+
+# ---------- Dotfiles installer (prefers dotfiles/, falls back to legacy vim/) ----------
+_mapped_target_name() {
+  case "$1" in
+    vimrc)            echo ".vimrc" ;;
+    gvimrc)           echo ".gvimrc" ;;
+    p10k.zsh)         echo ".p10k.zsh" ;;
+    aliases)          echo ".aliases" ;;
+    gitconfig)        echo ".gitconfig" ;;
+    gitignore_global) echo ".gitignore_global" ;;
+    zshrc.extra)      echo ".zshrc.extra" ;;
+    *)                echo ".$1" ;;
+  esac
+}
+
+install_dotfiles_from_repo() {
+  local SRC_DIR=""
+  if [ -d "$RS_DEST/dotfiles" ]; then
+    SRC_DIR="$RS_DEST/dotfiles"
+  elif [ -d "$RS_DEST/vim" ]; then
+    SRC_DIR="$RS_DEST/vim"   # legacy support
+  fi
+  [ -n "$SRC_DIR" ] || { echo "[i] No dotfiles directory found; skipping."; return 0; }
+
+  local MODE="${RS_DOTFILES_MODE:-copy}"   # set RS_DOTFILES_MODE=link to symlink
+  local BAK_DIR="$HOME/.dotfiles_backup/$(date +%Y%m%d-%H%M%S)"
+  mkdir -p "$BAK_DIR"
+
+  shopt -s nullglob
+  for path in "$SRC_DIR"/*; do
+    [ -f "$path" ] || continue
+    local base target
+    base="$(basename "$path")"
+
+    if [ "$(basename "$SRC_DIR")" = "vim" ]; then
+      case "$base" in
+        .vimrc|.gvimrc) target="$HOME/$base" ;;
+        vimrc)           target="$HOME/.vimrc" ;;
+        gvimrc)          target="$HOME/.gvimrc" ;;
+        *)               continue ;;
+      esac
+    else
+      target="$HOME/$(_mapped_target_name "$base")"
+    fi
+
+    if [ -e "$target" ] && ! cmp -s "$path" "$target"; then
+      mv -f "$target" "$BAK_DIR/$(basename "$target")"
+      echo "[i] Backed up $(basename "$target") → $BAK_DIR/"
+    fi
+
+    if [ "$MODE" = "link" ]; then
+      ln -snf "$path" "$target"
+    else
+      cp -f "$path" "$target"
+    fi
+    echo "[✓] Installed $(basename "$target") from repo"
+  done
+  shopt -u nullglob
+
+  # Ensure Vim plugins if referenced
+  [ -f "$HOME/.vimrc" ] && ensure_vim_plugins || true
+
+  # Ensure Zsh includes aliases/p10k and optional extras
+  ensure_line "$HOME/.zshrc" '[ -f ~/.aliases ] && source ~/.aliases'
+  ensure_block "$HOME/.zshrc" "# >>> RAPID OMZ START" "# >>> RAPID OMZ END" \
+'export ZSH="$HOME/.oh-my-zsh"
+ZSH_THEME="powerlevel10k/powerlevel10k"
+plugins=(git)
+source "$ZSH/oh-my-zsh.sh"
+[[ -f ~/.p10k.zsh ]] && source ~/.p10k.zsh
+[ -f ~/.zshrc.extra ] && source ~/.zshrc.extra'
 }
 
 install_rapid_bin() {
@@ -75,15 +156,16 @@ install_rapid_bin() {
 
 setup_shell_env() {
   echo "[*] Setting up shell environment…"
+  # Aliases + EDITOR
   touch "$HOME/.aliases"
   ensure_line "$HOME/.aliases" 'alias windiff=opendiff'
   ensure_line "$HOME/.zshrc" '[ -f ~/.aliases ] && source ~/.aliases'
   ensure_line "$HOME/.bashrc" '[ -f ~/.aliases ] && source ~/.aliases'
-
   if ! grep -Eq '^\s*export\s+EDITOR=' "$HOME/.zshrc" 2>/dev/null; then
     echo 'export EDITOR=vim' >> "$HOME/.zshrc"
   fi
 
+  # PATH: ~/bin/local first, then ~/bin/rapid
   mkdir -p "$HOME/bin/local"
   local PATH_BLOCK='
 # >>> Rapid PATH >>>
@@ -106,12 +188,16 @@ mac_setup() {
   if ! /usr/bin/xcode-select -p >/dev/null 2>&1; then
     echo "[*] Installing Xcode Command Line Tools…"
     xcode-select --install || true
-    echo ">>> After install completes, press Enter."
+    echo ">>> After the installer finishes, press Enter to continue."
     read -r _
   fi
 
-  echo "[*] Caching sudo…"
-  if sudo -v; then ( while true; do sudo -n true; sleep 60; kill -0 "$$" || exit; done ) 2>/dev/null & fi
+  echo "[*] Caching sudo (enter your macOS password once)…"
+  if sudo -v; then
+    ( while true; do sudo -n true; sleep 60; kill -0 "$$" || exit; done ) 2>/dev/null &
+  else
+    echo "[!] Could not cache sudo; Homebrew may prompt or fail if you aren't an Admin." >&2
+  fi
 
   if ! command -v brew >/dev/null 2>&1; then
     echo "[*] Installing Homebrew…"
@@ -137,17 +223,22 @@ mac_setup() {
     RUNZSH=no CHSH=no KEEP_ZSHRC=yes \
       sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
   fi
+  # Try Nerd Font (ignore failures if tap/layout changes)
   brew install --cask font-meslo-lg-nerd-font || true
+
   local ZSH_CUSTOM="${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}"
   if [ ! -d "$ZSH_CUSTOM/themes/powerlevel10k" ]; then
     git clone --depth=1 https://github.com/romkatv/powerlevel10k.git "$ZSH_CUSTOM/themes/powerlevel10k"
   fi
-  local ZSH_BLOCK='export ZSH="$HOME/.oh-my-zsh"
+
+  # Ensure Zsh loads OMZ + P10k and optional config
+  ensure_block "$HOME/.zshrc" "# >>> RAPID OMZ START" "# >>> RAPID OMZ END" \
+'export ZSH="$HOME/.oh-my-zsh"
 ZSH_THEME="powerlevel10k/powerlevel10k"
 plugins=(git)
 source "$ZSH/oh-my-zsh.sh"
-[[ -f ~/.p10k.zsh ]] && source ~/.p10k.zsh'
-  ensure_block "$HOME/.zshrc" "# >>> RAPID OMZ START" "# >>> RAPID OMZ END" "$ZSH_BLOCK"
+[[ -f ~/.p10k.zsh ]] && source ~/.p10k.zsh
+[ -f ~/.zshrc.extra ] && source ~/.zshrc.extra'
 }
 
 # ---------- Linux setup ----------
@@ -164,16 +255,16 @@ linux_setup() {
   fi
 }
 
-# ---------- Repo clone ----------
+# ---------- Repo clone / refresh ----------
 clone_repo() {
   echo "[*] Getting your repo: $RS_REPO_SLUG@$RS_BRANCH → $RS_DEST"
   if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
-    echo "[*] Using gh clone…"
+    echo "[*] Using gh clone (fresh copy)…"
     rm -rf "$RS_DEST"
     gh repo clone "$RS_REPO_SLUG" "$RS_DEST" -- --depth=1 --branch "$RS_BRANCH"
   else
     if [ -d "$RS_DEST/.git" ]; then
-      echo "[*] Existing repo — refreshing…"
+      echo "[*] Existing repo — refreshing from remote…"
       ( cd "$RS_DEST" && git fetch origin "$RS_BRANCH" --depth=1 && git reset --hard "origin/$RS_BRANCH" && git clean -fdx )
     else
       git clone --depth=1 --branch "$RS_BRANCH" "https://github.com/${RS_REPO_SLUG}.git" "$RS_DEST"
@@ -200,7 +291,6 @@ run_tasks() {
       echo "[i] Skipping '${task}': no bootstrap_${task}.sh found."
       continue
     fi
-    # Each task sources lib/bootstrap_common.sh to print its banner
     ( cd "$(dirname "$script")" && bash "./$(basename "$script")" )
   done
 }
@@ -215,9 +305,11 @@ case "$OS" in
 esac
 
 clone_repo
+# Make repo shell scripts executable
 find "$RS_DEST" -type f -name "*.sh" -exec chmod +x {} \; || true
-install_vim_configs_from_repo
+
 install_rapid_bin
+install_dotfiles_from_repo
 setup_shell_env
 run_tasks
 
