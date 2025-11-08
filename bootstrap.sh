@@ -31,7 +31,7 @@ ensure_line() {
   grep -Fqx -- "$line" "$file" 2>/dev/null || printf '%s\n' "$line" >> "$file"
 }
 
-setup_aliases() {
+setup_shell_env() {
   echo "[*] Setting up shell aliases…"
   touch "$HOME/.aliases"
 
@@ -433,7 +433,11 @@ export PATH
 if ! grep -q ">>> Rapid local bin setup >>>" "$HOME/.zshrc" 2>/dev/null; then
   echo "$PATH_BLOCK" >> "$HOME/.zshrc"
 fi
-setup_aliases
+setup_shell_env
+
+# Ensure EDITOR is set to vim in .zshrc
+ensure_line "$HOME/.zshrc" 'export EDITOR=vim'
+
 install_rapid_bin
 install_vim_configs_from_repo
 ensure_vim_plugins
