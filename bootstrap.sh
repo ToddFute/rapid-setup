@@ -7,7 +7,7 @@ RS_REPO_SLUG="${RS_REPO_SLUG:-ToddFute/rapid-setup}"
 RS_BRANCH="${RS_BRANCH:-main}"
 RS_DEST="${RS_DEST:-$HOME/rapid-setup}"
 
-# ---------- Args capture (robust for bash -c / -s / direct run) ----------
+# ---------- Args capture (works for bash -c / -s / file run) ----------
 declare -a BOOTSTRAP_PARAMS=()
 if [ -n "${0-}" ] && [ "$0" != "bash" ] && [ "$0" != "-bash" ]; then
   BOOTSTRAP_PARAMS=( "$0" "$@" )
@@ -15,7 +15,7 @@ else
   BOOTSTRAP_PARAMS=( "$@" )
 fi
 
-# ---------- Nested guard flag (don’t re-chain in children) ----------
+# ---------- Nested flag (don’t re-chain in children) ----------
 if [ "${RS_NESTED:-0}" = "1" ]; then
   NESTED=1
 else
@@ -67,7 +67,6 @@ ensure_vim_plugins() {
 }
 
 install_vim_configs_from_repo() {
-  # Copy .vimrc / .gvimrc from repo if present
   if [ -f "$RS_DEST/.vimrc" ]; then
     cp -f "$RS_DEST/.vimrc" "$HOME/.vimrc"
     echo "[✓] Installed ~/.vimrc from repo"
@@ -83,7 +82,6 @@ install_rapid_bin() {
   local DST="$HOME/bin/rapid"
   if [ -d "$SRC" ]; then
     mkdir -p "$DST"
-    # portable copy (no rsync dependency)
     shopt -s dotglob nullglob
     cp -R "$SRC"/* "$DST"/ 2>/dev/null || true
     shopt -u dotglob nullglob
@@ -96,17 +94,18 @@ install_rapid_bin() {
 
 setup_shell_env() {
   echo "[*] Setting up common shell environment…"
-  # Ensure ~/.aliases with windiff
+  # Aliases (common to mac+linux)
   touch "$HOME/.aliases"
   ensure_line "$HOME/.aliases" 'alias windiff=opendiff'
-  # Source .aliases in zsh & bash
   ensure_line "$HOME/.zshrc" '[ -f ~/.aliases ] && source ~/.aliases'
   ensure_line "$HOME/.bashrc" '[ -f ~/.aliases ] && source ~/.aliases'
+
   # EDITOR
   if ! grep -Eq '^\s*export\s+EDITOR=' "$HOME/.zshrc" 2>/dev/null; then
     echo 'export EDITOR=vim' >> "$HOME/.zshrc"
   fi
-  # ~/bin/local before ~/bin/rapid
+
+  # Ensure ~/bin/local (before) and ~/bin/rapid in PATH
   mkdir -p "$HOME/bin/local"
   local PATH_BLOCK='
 # >>> Rapid local/rapid bin setup >>>
@@ -126,7 +125,7 @@ export PATH
 mac_setup() {
   echo "[*] Detected macOS"
 
-  # Not as root (Homebrew refuses root)
+  # Homebrew must not run as root on macOS
   if [ "${EUID:-$(id -u)}" -eq 0 ]; then
     echo "Don't run this script with sudo on macOS. Re-run as your normal user." >&2
     exit 1
@@ -162,13 +161,10 @@ mac_setup() {
 
   # Activate brew in current and future shells
   local BREW_BIN
-  if [ -x /opt/homebrew/bin/brew ]; then
-    BREW_BIN=/opt/homebrew/bin/brew
-  elif [ -x /usr/local/bin/brew ]; then
-    BREW_BIN=/usr/local/bin/brew
-  else
-    BREW_BIN="$(command -v brew)"
-  fi
+  if   [ -x /opt/homebrew/bin/brew ]; then BREW_BIN=/opt/homebrew/bin/brew
+  elif [ -x /usr/local/bin/brew   ]; then BREW_BIN=/usr/local/bin/brew
+  else BREW_BIN="$(command -v brew)"; fi
+
   local SHELLENV_LINE
   SHELLENV_LINE='eval "$('"$BREW_BIN"' shellenv)"'
   ensure_line "$HOME/.zprofile" "$SHELLENV_LINE"
@@ -190,15 +186,16 @@ mac_setup() {
   else
     echo "[i] Oh My Zsh already present."
   fi
+
   brew install --cask font-meslo-lg-nerd-font || true
-  local ZSH_CUSTOM
-  ZSH_CUSTOM="${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}"
+  local ZSH_CUSTOM; ZSH_CUSTOM="${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}"
   if [ ! -d "$ZSH_CUSTOM/themes/powerlevel10k" ]; then
     git clone --depth=1 https://github.com/romkatv/powerlevel10k.git "$ZSH_CUSTOM/themes/powerlevel10k"
     echo "[✓] Installed Powerlevel10k theme."
   else
     echo "[i] Powerlevel10k already installed."
   fi
+
   local ZSH_BLOCK
   ZSH_BLOCK='export ZSH="$HOME/.oh-my-zsh"
 ZSH_THEME="powerlevel10k/powerlevel10k"
@@ -215,7 +212,7 @@ source "$ZSH/oh-my-zsh.sh"
     read -r _
   fi
 
-  # Default to zsh (optional, no-op if already zsh)
+  # Default to zsh
   if [ "${SHELL:-}" != "/bin/zsh" ] && command -v chsh >/dev/null 2>&1; then
     chsh -s /bin/zsh || true
   fi
@@ -223,13 +220,11 @@ source "$ZSH/oh-my-zsh.sh"
 
 linux_setup() {
   echo "[*] Detected Linux"
-  local SUDO=""
-  if have_sudo; then SUDO="sudo"; fi
+  local SUDO=""; if have_sudo; then SUDO="sudo"; fi
 
   if need_cmd apt; then
     $SUDO apt update -y
     $SUDO apt install -y git curl wget tree vim-gtk3 tar || true
-    # gh may require GH CLI repo on some distros; try best-effort
     $SUDO apt install -y gh || true
     $SUDO apt install -y silversearcher-ag || true
   elif need_cmd dnf; then
@@ -277,32 +272,9 @@ clone_repo() {
   fi
 }
 
-# ---------- Run repo bootstrap and requested tasks ----------
+# ---------- Run tasks then (optionally) repo bootstrap ----------
 run_repo_bootstrap() {
-  # If we’re already inside a child bootstrap, don’t chain further.
-  if [ "${NESTED:-0}" = "1" ]; then
-    echo "[i] Nested call: skipping run_repo_bootstrap to avoid recursion."
-  else
-    if [ -x "$RS_DEST/bootstrap.sh" ]; then
-      # skip if literally same file to avoid self-loop
-      if cmp -s "$0" "$RS_DEST/bootstrap.sh"; then
-        echo "[i] Repo bootstrap is the same script; skipping to avoid loop."
-      else
-        echo "[*] Running repo bootstrap.sh…"
-        ( cd "$RS_DEST" && RS_NESTED=1 bash ./bootstrap.sh )
-      fi
-    elif [ -x "$RS_DEST/macos/setup.sh" ] && [ "${PLATFORM:-}" = "macos" ]; then
-      echo "[*] Running macOS setup…"
-      ( cd "$RS_DEST/macos" && RS_NESTED=1 bash ./setup.sh )
-    elif [ -x "$RS_DEST/linux/setup.sh" ] && [ "${PLATFORM:-}" = "linux" ]; then
-      echo "[*] Running Linux setup…"
-      ( cd "$RS_DEST/linux" && RS_NESTED=1 bash ./setup.sh )
-    else
-      echo "[i] No repo bootstrap found; proceeding to task scripts (if any)."
-    fi
-  fi
-
-  # Run requested task scripts: bootstrap_<param>.sh
+  # 1) Always run requested task scripts first (bootstrap_<param>.sh)
   if (( ${#BOOTSTRAP_PARAMS[@]} )); then
     echo "[*] Running requested task bootstrap scripts: ${BOOTSTRAP_PARAMS[*]}"
   fi
@@ -313,9 +285,7 @@ run_repo_bootstrap() {
       "$RS_DEST/bin_rapid/bootstrap_${task}.sh" \
       "$HOME/bin/rapid/bootstrap_${task}.sh"
     do
-      if [ -f "$candidate" ]; then
-        script="$candidate"; break
-      fi
+      if [ -f "$candidate" ]; then script="$candidate"; break; fi
     done
     if [ -z "$script" ]; then
       echo "[i] Skipping '${task}': no bootstrap_${task}.sh found."
@@ -324,6 +294,34 @@ run_repo_bootstrap() {
     echo "[*] Running ${script} …"
     ( cd "$(dirname "$script")" && RS_NESTED=1 bash "./$(basename "$script")" )
   done
+
+  # 2) Avoid recursion / duplicate work
+  if [ "${NESTED:-0}" = "1" ]; then
+    echo "[i] Nested call: skipping repo bootstrap to avoid recursion."
+    return
+  fi
+  if [ ! -f "${0-}" ]; then
+    echo "[i] Launched from curl/string; skipping repo bootstrap to avoid duplicate work."
+    return
+  fi
+
+  # 3) If running from a real file, allow chaining into repo bootstrap once
+  if [ -x "$RS_DEST/bootstrap.sh" ]; then
+    if cmp -s "$0" "$RS_DEST/bootstrap.sh"; then
+      echo "[i] Repo bootstrap is the same script; skipping."
+    else
+      echo "[*] Running repo bootstrap.sh…"
+      ( cd "$RS_DEST" && RS_NESTED=1 bash ./bootstrap.sh )
+    fi
+  elif [ -x "$RS_DEST/macos/setup.sh" ] && [ "${PLATFORM:-}" = "macos" ]; then
+    echo "[*] Running macOS setup…"
+    ( cd "$RS_DEST/macos" && RS_NESTED=1 bash ./setup.sh )
+  elif [ -x "$RS_DEST/linux/setup.sh" ] && [ "${PLATFORM:-}" = "linux" ]; then
+    echo "[*] Running Linux setup…"
+    ( cd "$RS_DEST/linux" && RS_NESTED=1 bash ./setup.sh )
+  else
+    echo "[i] No repo bootstrap found."
+  fi
 }
 
 # ---------- Main ----------
