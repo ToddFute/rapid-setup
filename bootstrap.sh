@@ -9,14 +9,13 @@ set -euo pipefail
 # Collect any positional args, e.g. "ai comm misc"
 BOOTSTRAP_PARAMS=( "$@" )
 
-# If invoked via `bash -c "..." comm ws`, $0 holds the first task ("comm")
-if [ "${BASH_SOURCE[0]}" = "$0" ] || [ "$0" = "bash" ]; then
-  : # normal file execution, nothing to do
-else
-  # running under `bash -c`: include $0 as a task if it looks like one
-  if [ -n "${0-}" ] && [[ "$0" != "bash" ]]; then
-    BOOTSTRAP_PARAMS=( "$0" "${BOOTSTRAP_PARAMS[@]}" )
-  fi
+# Collect any positional args from the CLI
+BOOTSTRAP_PARAMS=( "$@" )
+
+# If invoked via `bash -c "..." comm ws`, $0 will be "comm".
+# Include it as a task if it isn't the bash program itself.
+if [ -n "${0-}" ] && [ "$0" != "bash" ] && [ "$0" != "-bash" ]; then
+  BOOTSTRAP_PARAMS=( "$0" "${BOOTSTRAP_PARAMS[@]}" )
 fi
 
 # ========= Configurable bits =========
