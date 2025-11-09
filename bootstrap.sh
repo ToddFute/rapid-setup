@@ -7,7 +7,7 @@ RS_REPO_SLUG="${RS_REPO_SLUG:-ToddFute/rapid-setup}"
 RS_BRANCH="${RS_BRANCH:-main}"
 RS_DEST="${RS_DEST:-$HOME/rapid-setup}"
 
-# ---------- Arg capture ----------
+# ---------- Capture task params (e.g., `comm ws appsec`) ----------
 declare -a BOOTSTRAP_PARAMS=()
 if [ -n "${0-}" ] && [ "$0" != "bash" ] && [ "$0" != "-bash" ]; then
   BOOTSTRAP_PARAMS=( "$0" "$@" )
@@ -56,8 +56,7 @@ ensure_vim_plugins() {
     if [ ! -f "$HOME/.vim/autoload/pathogen.vim" ]; then
       echo "[*] Installing pathogen.vim…"
       mkdir -p "$HOME/.vim/autoload" "$HOME/.vim/bundle"
-      curl -fsSLo "$HOME/.vim/autoload/pathogen.vim" \
-        https://tpo.pe/pathogen.vim
+      curl -fsSLo "$HOME/.vim/autoload/pathogen.vim" https://tpo.pe/pathogen.vim
     fi
   fi
   # Badwolf theme
@@ -69,6 +68,42 @@ ensure_vim_plugins() {
   fi
 }
 
+# ---------- Robust OMZ/P10k/shell integrations block ----------
+OMZ_BLOCK='
+# --- Rapid Setup: Oh My Zsh + P10k + integrations ---
+export ZSH="$HOME/.oh-my-zsh"
+ZSH_THEME="powerlevel10k/powerlevel10k"
+plugins=(git)
+
+# Load Oh My Zsh if present
+if [ -f "$ZSH/oh-my-zsh.sh" ]; then
+  source "$ZSH/oh-my-zsh.sh"
+else
+  echo "[warn] oh-my-zsh not found at $ZSH"
+fi
+
+# iTerm2 shell integration (optional)
+ITERM_SHELL_INTEGRATION="$HOME/.iterm2_shell_integration.zsh"
+[ -f "$ITERM_SHELL_INTEGRATION" ] && source "$ITERM_SHELL_INTEGRATION"
+
+# zsh-syntax-highlighting (Homebrew path discovery)
+if command -v brew >/dev/null 2>&1; then
+  ZSH_HIGHLIGHT="$(brew --prefix)/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
+  [ -f "$ZSH_HIGHLIGHT" ] && source "$ZSH_HIGHLIGHT"
+fi
+
+# Optional custom functional plugin (only if you actually have it)
+FUNC_PLUGIN="$HOME/.zsh/functional/functional.plugin.zsh"
+[ -f "$FUNC_PLUGIN" ] && . "$FUNC_PLUGIN"
+
+# Powerlevel10k personal config
+[ -f "$HOME/.p10k.zsh" ] && source "$HOME/.p10k.zsh"
+
+# Allow user-specific extras
+[ -f "$HOME/.zshrc.extra" ] && source "$HOME/.zshrc.extra"
+# --- End Rapid Setup block ---
+'
+
 # ---------- Dotfiles installer (prefers dotfiles/, falls back to legacy vim/) ----------
 _mapped_target_name() {
   case "$1" in
@@ -78,11 +113,14 @@ _mapped_target_name() {
     aliases)          echo ".aliases" ;;
     gitconfig)        echo ".gitconfig" ;;
     gitignore_global) echo ".gitignore_global" ;;
-    zshrc)            echo ".zshrc" ;;          # <— add this line
+    zshrc)            echo ".zshrc" ;;
     zshrc.extra)      echo ".zshrc.extra" ;;
     *)                echo ".$1" ;;
   esac
 }
+
+# Global flag indicating whether we installed ~/.zshrc from repo
+ZSHRC_INSTALLED_FROM_REPO=0
 
 install_dotfiles_from_repo() {
   local SRC_DIR=""
@@ -93,12 +131,9 @@ install_dotfiles_from_repo() {
   fi
   [ -n "$SRC_DIR" ] || { echo "[i] No dotfiles directory found; skipping."; return 0; }
 
-  local MODE="${RS_DOTFILES_MODE:-copy}"
+  local MODE="${RS_DOTFILES_MODE:-copy}"   # set RS_DOTFILES_MODE=link to symlink
   local BAK_DIR="$HOME/.dotfiles_backup/$(date +%Y%m%d-%H%M%S)"
   mkdir -p "$BAK_DIR"
-
-  # Track whether we installed a full ~/.zshrc from dotfiles
-  ZSHRC_INSTALLED_FROM_REPO=0
 
   shopt -s nullglob
   for path in "$SRC_DIR"/*; do
@@ -117,12 +152,13 @@ install_dotfiles_from_repo() {
       target="$HOME/$(_mapped_target_name "$base")"
     fi
 
-    # backup if different
+    # Backup if target exists and differs
     if [ -e "$target" ] && ! cmp -s "$path" "$target"; then
       mv -f "$target" "$BAK_DIR/$(basename "$target")"
       echo "[i] Backed up $(basename "$target") → $BAK_DIR/"
     fi
 
+    # Install
     if [ "$MODE" = "link" ]; then
       ln -snf "$path" "$target"
     else
@@ -130,14 +166,14 @@ install_dotfiles_from_repo() {
     fi
     echo "[✓] Installed $(basename "$target") from repo"
 
-    # Remember if we installed ~/.zshrc
+    # Track if we installed ~/.zshrc
     if [ "$target" = "$HOME/.zshrc" ]; then
       ZSHRC_INSTALLED_FROM_REPO=1
     fi
   done
   shopt -u nullglob
 
-  # Ensure Vim plugins if referenced
+  # Ensure Vim plugins if referenced by ~/.vimrc
   [ -f "$HOME/.vimrc" ] && ensure_vim_plugins || true
 }
 
@@ -157,7 +193,7 @@ install_rapid_bin() {
 setup_shell_env() {
   echo "[*] Setting up shell environment…"
 
-  # Aliases file + include
+  # Aliases + include
   touch "$HOME/.aliases"
   ensure_line "$HOME/.aliases" 'alias windiff=opendiff'
   ensure_line "$HOME/.zshrc" '[ -f ~/.aliases ] && source ~/.aliases' || true
@@ -179,15 +215,9 @@ export PATH
 '
   ensure_block "$HOME/.zshrc" "# >>> RAPID PATH START" "# >>> RAPID PATH END" "$PATH_BLOCK"
 
-  # Only inject the Oh My Zsh + Powerlevel10k block if we did NOT install a full .zshrc from repo.
+  # Only inject OMZ/P10k/integrations if repo did NOT provide a full ~/.zshrc
   if [ "${ZSHRC_INSTALLED_FROM_REPO:-0}" -ne 1 ]; then
-    ensure_block "$HOME/.zshrc" "# >>> RAPID OMZ START" "# >>> RAPID OMZ END" \
-'export ZSH="$HOME/.oh-my-zsh"
-ZSH_THEME="powerlevel10k/powerlevel10k"
-plugins=(git)
-source "$ZSH/oh-my-zsh.sh"
-[[ -f ~/.p10k.zsh ]] && source ~/.p10k.zsh
-[ -f ~/.zshrc.extra ] && source ~/.zshrc.extra'
+    ensure_block "$HOME/.zshrc" "# >>> RAPID OMZ START" "# >>> RAPID OMZ END" "$OMZ_BLOCK"
   fi
 }
 
@@ -237,7 +267,8 @@ mac_setup() {
     RUNZSH=no CHSH=no KEEP_ZSHRC=yes \
       sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
   fi
-  # Try Nerd Font (ignore failures if tap/layout changes)
+
+  # Fonts for P10k (ignore failures if tap/layout changes)
   brew install --cask font-meslo-lg-nerd-font || true
 
   local ZSH_CUSTOM="${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}"
@@ -245,14 +276,12 @@ mac_setup() {
     git clone --depth=1 https://github.com/romkatv/powerlevel10k.git "$ZSH_CUSTOM/themes/powerlevel10k"
   fi
 
-  # Ensure Zsh loads OMZ + P10k and optional config
-  ensure_block "$HOME/.zshrc" "# >>> RAPID OMZ START" "# >>> RAPID OMZ END" \
-'export ZSH="$HOME/.oh-my-zsh"
-ZSH_THEME="powerlevel10k/powerlevel10k"
-plugins=(git)
-source "$ZSH/oh-my-zsh.sh"
-[[ -f ~/.p10k.zsh ]] && source ~/.p10k.zsh
-[ -f ~/.zshrc.extra ] && source ~/.zshrc.extra'
+  # New: deps for robust sourcing
+  brew install zsh-syntax-highlighting || true
+  curl -fsSL https://iterm2.com/shell_integration/zsh -o "$HOME/.iterm2_shell_integration.zsh" || true
+
+  # Inject robust OMZ block if needed (if repo doesn't provide zshrc later, setup_shell_env will also ensure it)
+  ensure_block "$HOME/.zshrc" "# >>> RAPID OMZ START" "# >>> RAPID OMZ END" "$OMZ_BLOCK"
 }
 
 # ---------- Linux setup ----------
@@ -287,12 +316,17 @@ clone_repo() {
   echo "[✓] Repo ready."
 }
 
-# ---------- Run requested task scripts ----------
+# ---------- Run requested task scripts (bootstrap_<name>.sh) ----------
 run_tasks() {
   if (( ${#BOOTSTRAP_PARAMS[@]} )); then
     echo "[*] Running requested task bootstrap scripts: ${BOOTSTRAP_PARAMS[*]}"
   fi
   for task in "${BOOTSTRAP_PARAMS[@]}"; do
+    # allow only simple names like letters, numbers, _, -
+    if [[ ! "$task" =~ ^[A-Za-z0-9_-]+$ ]]; then
+      echo "[i] Ignoring non-task arg '$task'"
+      continue
+    fi
     local script=""
     for candidate in \
       "$RS_DEST/bootstrap_${task}.sh" \
@@ -305,6 +339,7 @@ run_tasks() {
       echo "[i] Skipping '${task}': no bootstrap_${task}.sh found."
       continue
     fi
+    echo "[*] Running $(basename "$script") …"
     ( cd "$(dirname "$script")" && bash "./$(basename "$script")" )
   done
 }
