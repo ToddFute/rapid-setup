@@ -1,0 +1,228 @@
+# Create grepable tree
+alias reff='find . -type f -print|sed -e "s/^/\"/" -e "s/$/\"/" > ffiles.txt'
+alias ref='find . -type f -print|sed -e "s/^/\"/" -e "s/$/\"/"'
+
+# Load History
+if [[ "$SHELL" == "/bin/zsh" ]]; then
+    alias lh='function _lh(){ HISTFILE="$HOME/.zsh_history_$1"; fc -R ; title $1; source ~/.setup.$1; }; _lh'
+else
+    alias lh='function _lh(){ export HISTTIMEFORMAT="%h/%d - %H:%M:%S "; HISTFILE="$HOME/.bash_history_$1"; history -r $HISTFILE; title $1; source ~/.setup.$1; }; _lh'
+fi
+
+# Search/Show history
+alias h='function _h(){ if [[ "$1" == "" ]]; then history|less; else history|grep $1; fi; }; _h'
+
+alias .s=sudo
+alias j=jobs
+alias windiff=opendiff
+
+
+# Rotate the stack
+# e.g. bring the 3rd directory on the stack to the front (0-based) and rotating the stack
+# If stack was '~/examples/othercode /opt/webserver7/logs ~/src/myproject'
+# Then stack is now '~/src/myproject ~/examples/othercode /opt/webserver7/logs'
+old_rotd () 
+{ 
+    pushd +2
+}
+
+rotd () 
+{ 
+    set -- $(peekd);
+    [[ $# -lt 3 ]] && { 
+        peekd;
+        return
+    };
+    two=$1;
+    shift;
+    three=$1;
+    shift;
+    one=$1;
+    shift;
+    ignore popd;
+    ignore popd;
+    [[ $# -gt 0 ]] && ignore popd;
+    eval ignore pushd $three;
+    eval ignore pushd $two;
+    eval ignore pushd $one;
+    cleandirlist
+}
+
+peekd () 
+{ 
+    command pushd . > /dev/null;
+    popd
+}
+
+function pd()
+{
+    if [[ $# -ge 1 ]];
+    then
+        choice="$1"
+    else
+        dirs -v
+        echo -n "? "
+        read choice
+    fi
+    if [[ -n $choice ]];
+    then
+        declare -i cnum="$choice"
+        if [[ $cnum != $choice ]];
+        then #choice is not numeric
+            choice=$(dirs -v | grep $choice | tail -1 | awk '{print $1}')
+            cnum="$choice"
+            if [[ -z $choice || $cnum != $choice ]];
+            then
+                echo "$choice not found"
+                return
+            fi
+        fi
+        # choice="+$choice" # Bash wants this
+        choice="-$choice"
+    fi
+    if [[ -n $choice ]]; then
+        # pushd $choice # Bash wants this
+        cd $choice
+    fi
+}
+
+alias git_pull_all='git branch -r | grep -v "\->" | while read remote; do git branch --track "${remote#origin/}" "$remote"; done ; git fetch --all; git pull --all'
+
+
+alias another_chrome='/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --user-data-dir=/Users/toddbradfute/Library/Application\ Support/Google/ChromePersonal > /dev/null 2>&1 &'
+alias beta_chrome='/Applications/Google\ Chrome\ Beta.app/Contents/MacOS/Google\ Chrome --user-data-dir=/Users/toddbradfute/Library/Application\ Support/Google/ChromeBetaPersonal > /dev/null 2>&1 &'
+
+# $1 = type; 0 - both, 1 - tab, 2 - title
+# rest = text
+setTerminalText () {
+    # echo works in bash & zsh
+    local mode=$1 ; shift
+    echo -ne "\033]$mode;$@\007"
+}
+stt_both  () { setTerminalText 0 $@; }
+stt_tab   () { setTerminalText 1 $@; }
+stt_title () { setTerminalText 2 $@; }
+
+if [[ "$SHELL" =~ "zsh" ]]; then
+    PRE_TITLE="\e]1;"
+    POST_TITLE="\a"
+else
+    PRE_TITLE= "\033]0;"
+    POST_TITLE="\007"
+fi
+
+function title {
+    # echo -ne ${PRE_TITLE}$*${POST_TITLE}
+    stt_title $*
+}
+
+function retitle {
+    title ${HISTFILE##*_}
+}
+
+function find_sorted_by_time {
+    find . -type f -exec stat -f "%Sm %N" -t "%Y%y%m%d%H%M" {} \; | sort -r | awk -F' ' '{ print substr($0, length($1) + 2) }'
+}
+
+urlencode() {
+    # urlencode <string>
+
+    local length="${#1}"
+    for (( i = 0; i < length; i++ )); do
+        local c="${1:i:1}"
+        case $c in
+            [a-zA-Z0-9.~_-]) printf "$c" ;;
+            *) printf '%s' "$c" | xxd -p -c1 |
+                   while read c; do printf '%%%s' "$c"; done ;;
+        esac
+    done
+}
+
+urldecode() {
+    # urldecode <string>
+
+    local url_encoded="${1//+/ }"
+    printf '%b' "${url_encoded//%/\\x}"
+}
+
+#export -f urldecode
+alias openvpn_admin="ssh -L 10943:localhost:943 $BASTION_USER@vpn.us-east-1.shibumidev.com -N"
+
+# Drive crgrep with a parameter
+# Common Resource Grep is from https://sourceforge.net/p/crgrep/wiki/Home/
+crgredi() {
+    crgrep --color always -i "$1" *.docx|less -r
+}
+
+crgred() {
+    crgrep --color always "$1" *.docx|less -r
+}
+
+crgreri() {
+    crgrep --color always -r -i "$1" .|less -r
+}
+
+crgrer() {
+    crgrep --color always -r "$1" .|less -r
+}
+
+# Daily notes stuff
+# Daily Summary
+dailys() {
+    echo "Recent open personal notes:"
+    ls -tr 20*Daily.txt|tail -n 21|sort|xargs grep -c '\*Todd: Personal' |grep -v ':0$' |tee /tmp/dailys.txt
+    echo "Recent (21 days) open notes:"
+    ls -tr 20*Daily.txt|tail -n 21|sort|xargs grep -c '\*Todd: '|grep -v ':0$'|grep -v -f /tmp/dailys.txt
+    echo "Use dailysv to edit them"
+}
+# And gvim-them
+# See script named dailysv
+dailysv_old() {
+gvim -p `ls -tr 20*Daily.txt|tail -n 21|sort|xargs grep -l '\*Todd: '`
+if [[ `ls -tr 20*Daily.txt|tail -n 21|sort|xargs grep -l '\*Todd: '|wc -l` -gt 10 ]]; then
+    echo "There are more than 10 files, open these manually:"
+    ls -tr 20*Daily.txt|tail -n 21|sort|xargs grep -l '\*Todd: '|tail +11
+fi
+}
+# Or grep-them
+dailysg() {
+    grep $@ `ls -tr 20*Daily.txt|tail -n 21|sort|xargs grep -l '\*Todd: '`
+}
+# Daily Detail
+dailyd() {
+    echo "Recent (21 days) open notes:"
+    ls -tr 20*Daily.txt|tail -n 21|sort|xargs grep '\*Todd: '
+    echo "Recent open personal notes:"
+    ls -tr 20*Daily.txt|tail -n 21|sort|xargs grep '\*Todd: Personal'
+}
+
+if [[ -f "~/.aliases_dir/kubectl" ]]; then
+    . ~/.aliases_dir/kubectl
+fi
+
+# Take the result of CloudWatch Log search (https://console.aws.amazon.com/cloudwatch/home?region=us-east-1#logsV2:log-groups/log-group/AuditWatch/log-events/o-b214nz8von_001978429989_CloudTrail_us-east-1$3FfilterPattern$3D$257B+$2528$2528$2524.errorCode+$253D+$2522*UnauthorizedOperation$2522$2529+$257C$257C+$2528$2524.errorCode+$253D+$2522AccessDenied*$2522$2529$2529+$2526$2526+$2528$2524.eventName+$2521$253D+$2522HeadBucket$2522$2529+$2526$2526+$2528$2528$2524.userIdentity.userName+NOT+EXISTS$2529+$257C$257C+$2528$2524.userIdentity.userName+$2521$253D+$2522github$2522$2529$2529+$2526$2526+$2528$2528$2524.eventName+$2521$253D+$2522TerminateJob$2522$2529+$257C$257C+$2528$2524.userIdentity.invokedBy+$2521$253D+$2522states.amazonaws.com$2522$2529$2529+$2526$2526+$2528$2528$2524.eventName+$2521$253D+$2522DescribeCertificate$2522$2529+$257C$257C+$2528$2524.userIdentity.sessionContext.sessionIssuer.userName+$2521$253D+$2522AWSServiceRoleForVPCS2SVPN$2522$2529$2529+$2526$2526+$2528$2528$2524.eventName+$2521$253D+$2522GetObject$2522$2529+$257C$257C+$2528$2524.userIdentity.accountId+$2521$253D+$2522ANONYMOUS_PRINCIPAL$2522$2529+$257C$257C+$2528$2524.requestParameters.bucketName+$2521$253D+$2522solver-infrastructure-tools$2522$2529$2529+$257D$26start$3D-86400000)
+# with the Actions -> Copy Search Results (ASCII) and run this
+pb_to_json() {
+    pbpaste | tee ascii.txt|grep eventVersion|awk 'BEGIN{FS="|"; print "{"}; NR>1{print prev ","} {prev = sprintf("\"%d\":%s\n", $2, $3)}; END{print prev; print "}"}'| jq . > CloudWatch_log.json
+    cat CloudWatch_log.json | jq '.[] | "\(.userIdentity.accountId) \(.sourceIPAddress) {\(.errorMessage)} {\(.resources)} "'
+    echo "cat CloudWatch_log.json | jq '.[] | \"\(.userIdentity.accountId) \(.sourceIPAddress) {\(.errorMessage)} {\(.resources)} \"'"
+    jq length CloudWatch_log.json | xargs -I {} echo "There are {} entries"
+}
+
+# Open Last - usually used in the Downloads directory to open something I just downloaded
+opl() {
+ls -tr|tail -1|sed -e "s/^/\"/" -e "s/$/\"/"|xargs open
+}
+
+# Get IP address (usually for synergy use)
+getip() {
+ifconfig|grep -Eo '172.* -->'|sed -e 's/ -->//'|tee /dev/stderr|pbcopy
+}
+
+alias act="act --container-architecture linux/amd64"
+
+alias kgp="kubectl get pods"
+alias kgs="kubectl get services"
+alias kpvc="kubectl get pvc"
+alias kpv="kubectl get pv"
+alias kcg="kubectl config get-contexts"
