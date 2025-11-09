@@ -1,365 +1,189 @@
 #!/usr/bin/env bash
-# Rapid Setup bootstrap (no recursion)
 set -euo pipefail
 
-# ---------- Config ----------
-RS_REPO_SLUG="${RS_REPO_SLUG:-ToddFute/rapid-setup}"
+# ========= Configurable bits =========
+RS_REPO_SLUG="${RS_REPO_SLUG:-ToddFute/rapid-setup}"   # <— set your real default
 RS_BRANCH="${RS_BRANCH:-main}"
 RS_DEST="${RS_DEST:-$HOME/rapid-setup}"
+# =====================================
 
-# ---------- Capture task params (e.g., `comm ws appsec`) ----------
-declare -a BOOTSTRAP_PARAMS=()
-if [ -n "${0-}" ] && [ "$0" != "bash" ] && [ "$0" != "-bash" ]; then
-  BOOTSTRAP_PARAMS=( "$0" "$@" )
-else
-  BOOTSTRAP_PARAMS=( "$@" )
-fi
-# Strip out -- and empties
-_tmp=()
-for a in "${BOOTSTRAP_PARAMS[@]}"; do
-  [ -z "$a" ] && continue
-  [ "$a" = "--" ] && continue
-  _tmp+=( "$a" )
-done
-BOOTSTRAP_PARAMS=( "${_tmp[@]}" )
-unset _tmp
+echo "[-] Rapid bootstrap starting…"
+OS="$(uname -s)"
+case "$OS" in
+  Darwin) PLATFORM="macos" ;;
+  Linux)  PLATFORM="linux" ;;
+  *) echo "Unsupported OS: $OS" >&2; exit 1 ;;
+esac
 
-# ---------- Helpers ----------
 need_cmd() { command -v "$1" >/dev/null 2>&1; }
+have_sudo() { command -v sudo >/dev/null 2>&1; }
 
-ensure_line() {
-  local file="$1" line="$2"
-  grep -Fqx -- "$line" "$file" 2>/dev/null || printf '%s\n' "$line" >> "$file"
-}
-
-ensure_block() {
-  # Remove any prior block delimited by start/end markers, then append a fresh one.
-  local file="$1" start="$2" end="$3" content="$4"
-  local tmp_content tmp_out
-  tmp_content="$(mktemp)"; tmp_out="$(mktemp)"
-  printf '%s\n' "$content" > "$tmp_content"
-  if [ -f "$file" ]; then
-    awk -v s="$start" -v e="$end" '
-      $0==s {inblock=1; next}
-      $0==e {inblock=0; next}
-      !inblock {print}
-    ' "$file" > "$tmp_out" && mv "$tmp_out" "$file"
-  fi
-  { printf '%s\n' "$start"; cat "$tmp_content"; printf '%s\n' "$end"; } >> "$file"
-  rm -f "$tmp_content" "$tmp_out"
-}
-
-# Optional: install Vim bits if referenced by ~/.vimrc
-ensure_vim_plugins() {
-  # Pathogen
-  if grep -qs 'pathogen#infect' "$HOME/.vimrc"; then
-    if [ ! -f "$HOME/.vim/autoload/pathogen.vim" ]; then
-      echo "[*] Installing pathogen.vim…"
-      mkdir -p "$HOME/.vim/autoload" "$HOME/.vim/bundle"
-      curl -fsSLo "$HOME/.vim/autoload/pathogen.vim" https://tpo.pe/pathogen.vim
-    fi
-  fi
-  # Badwolf theme
-  if grep -qs 'colorscheme[[:space:]]\+badwolf' "$HOME/.vimrc"; then
-    if [ ! -d "$HOME/.vim/bundle/badwolf" ]; then
-      echo "[*] Installing badwolf colorscheme…"
-      git clone --depth=1 https://github.com/sjl/badwolf.git "$HOME/.vim/bundle/badwolf"
-    fi
-  fi
-}
-
-# ---------- Robust OMZ/P10k/shell integrations block ----------
-OMZ_BLOCK='
-# --- Rapid Setup: Oh My Zsh + P10k + integrations ---
-export ZSH="$HOME/.oh-my-zsh"
-ZSH_THEME="powerlevel10k/powerlevel10k"
-plugins=(git)
-
-# Load Oh My Zsh if present
-if [ -f "$ZSH/oh-my-zsh.sh" ]; then
-  source "$ZSH/oh-my-zsh.sh"
-else
-  echo "[warn] oh-my-zsh not found at $ZSH"
-fi
-
-# iTerm2 shell integration (optional)
-ITERM_SHELL_INTEGRATION="$HOME/.iterm2_shell_integration.zsh"
-[ -f "$ITERM_SHELL_INTEGRATION" ] && source "$ITERM_SHELL_INTEGRATION"
-
-# zsh-syntax-highlighting (Homebrew path discovery)
-if command -v brew >/dev/null 2>&1; then
-  ZSH_HIGHLIGHT="$(brew --prefix)/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
-  [ -f "$ZSH_HIGHLIGHT" ] && source "$ZSH_HIGHLIGHT"
-fi
-
-# Optional custom functional plugin (only if you actually have it)
-FUNC_PLUGIN="$HOME/.zsh/functional/functional.plugin.zsh"
-[ -f "$FUNC_PLUGIN" ] && . "$FUNC_PLUGIN"
-
-# Powerlevel10k personal config
-[ -f "$HOME/.p10k.zsh" ] && source "$HOME/.p10k.zsh"
-
-# Allow user-specific extras
-[ -f "$HOME/.zshrc.extra" ] && source "$HOME/.zshrc.extra"
-# --- End Rapid Setup block ---
-'
-
-# ---------- Dotfiles installer (prefers dotfiles/, falls back to legacy vim/) ----------
-_mapped_target_name() {
-  case "$1" in
-    vimrc)            echo ".vimrc" ;;
-    gvimrc)           echo ".gvimrc" ;;
-    p10k.zsh)         echo ".p10k.zsh" ;;
-    aliases)          echo ".aliases" ;;
-    gitconfig)        echo ".gitconfig" ;;
-    gitignore_global) echo ".gitignore_global" ;;
-    zshrc)            echo ".zshrc" ;;
-    zshrc.extra)      echo ".zshrc.extra" ;;
-    *)                echo ".$1" ;;
-  esac
-}
-
-# Global flag indicating whether we installed ~/.zshrc from repo
-ZSHRC_INSTALLED_FROM_REPO=0
-
-install_dotfiles_from_repo() {
-  local SRC_DIR=""
-  if [ -d "$RS_DEST/dotfiles" ]; then
-    SRC_DIR="$RS_DEST/dotfiles"
-  elif [ -d "$RS_DEST/vim" ]; then
-    SRC_DIR="$RS_DEST/vim"   # legacy support
-  fi
-  [ -n "$SRC_DIR" ] || { echo "[i] No dotfiles directory found; skipping."; return 0; }
-
-  local MODE="${RS_DOTFILES_MODE:-copy}"   # set RS_DOTFILES_MODE=link to symlink
-  local BAK_DIR="$HOME/.dotfiles_backup/$(date +%Y%m%d-%H%M%S)"
-  mkdir -p "$BAK_DIR"
-
-  shopt -s nullglob
-  for path in "$SRC_DIR"/*; do
-    [ -f "$path" ] || continue
-    local base target
-    base="$(basename "$path")"
-
-    if [ "$(basename "$SRC_DIR")" = "vim" ]; then
-      case "$base" in
-        .vimrc|.gvimrc) target="$HOME/$base" ;;
-        vimrc)           target="$HOME/.vimrc" ;;
-        gvimrc)          target="$HOME/.gvimrc" ;;
-        *)               continue ;;
-      esac
-    else
-      target="$HOME/$(_mapped_target_name "$base")"
-    fi
-
-    # Backup if target exists and differs
-    if [ -e "$target" ] && ! cmp -s "$path" "$target"; then
-      mv -f "$target" "$BAK_DIR/$(basename "$target")"
-      echo "[i] Backed up $(basename "$target") → $BAK_DIR/"
-    fi
-
-    # Install
-    if [ "$MODE" = "link" ]; then
-      ln -snf "$path" "$target"
-    else
-      cp -f "$path" "$target"
-    fi
-    echo "[✓] Installed $(basename "$target") from repo"
-
-    # Track if we installed ~/.zshrc
-    if [ "$target" = "$HOME/.zshrc" ]; then
-      ZSHRC_INSTALLED_FROM_REPO=1
-    fi
-  done
-  shopt -u nullglob
-
-  # Ensure Vim plugins if referenced by ~/.vimrc
-  [ -f "$HOME/.vimrc" ] && ensure_vim_plugins || true
-}
-
-install_rapid_bin() {
-  local SRC="$RS_DEST/bin_rapid"
-  local DST="$HOME/bin/rapid"
-  if [ -d "$SRC" ]; then
-    mkdir -p "$DST"
-    shopt -s dotglob nullglob
-    cp -R "$SRC"/* "$DST"/ 2>/dev/null || true
-    shopt -u dotglob nullglob
-    chmod -R u+x "$DST" || true
-    echo "[✓] Installed ~/bin/rapid from repo/bin_rapid"
-  fi
-}
-
-setup_shell_env() {
-  echo "[*] Setting up shell environment…"
-
-  # Aliases + include
-  touch "$HOME/.aliases"
-  ensure_line "$HOME/.aliases" 'alias windiff=opendiff'
-  ensure_line "$HOME/.zshrc" '[ -f ~/.aliases ] && source ~/.aliases' || true
-  ensure_line "$HOME/.bashrc" '[ -f ~/.aliases ] && source ~/.aliases' || true
-
-  # EDITOR
-  if ! grep -Eq '^\s*export\s+EDITOR=' "$HOME/.zshrc" 2>/dev/null; then
-    echo 'export EDITOR=vim' >> "$HOME/.zshrc"
-  fi
-
-  # PATH: ~/bin/local first, then ~/bin/rapid
-  mkdir -p "$HOME/bin/local"
-  local PATH_BLOCK='
-# >>> Rapid PATH >>>
-if [ -d "$HOME/bin/local" ]; then PATH="$HOME/bin/local:$PATH"; fi
-if [ -d "$HOME/bin/rapid" ]; then PATH="$HOME/bin/rapid:$PATH"; fi
-export PATH
-# <<< Rapid PATH <<<
-'
-  ensure_block "$HOME/.zshrc" "# >>> RAPID PATH START" "# >>> RAPID PATH END" "$PATH_BLOCK"
-
-  # Only inject OMZ/P10k/integrations if repo did NOT provide a full ~/.zshrc
-  if [ "${ZSHRC_INSTALLED_FROM_REPO:-0}" -ne 1 ]; then
-    ensure_block "$HOME/.zshrc" "# >>> RAPID OMZ START" "# >>> RAPID OMZ END" "$OMZ_BLOCK"
-  fi
-}
-
-# ---------- macOS setup ----------
+# ---------- macOS ----------
 mac_setup() {
   echo "[*] Detected macOS"
 
+  # Homebrew must not run as root on macOS
   if [ "${EUID:-$(id -u)}" -eq 0 ]; then
-    echo "Don't run this as root on macOS." >&2; exit 1
+    echo "Don't run this script with sudo on macOS. Re-run as your normal user." >&2
+    exit 1
   fi
 
+  # Ensure Xcode Command Line Tools (needed by Homebrew)
   if ! /usr/bin/xcode-select -p >/dev/null 2>&1; then
-    echo "[*] Installing Xcode Command Line Tools…"
+    echo "[*] Installing Xcode Command Line Tools (a dialog may appear)…"
     xcode-select --install || true
+    echo
     echo ">>> After the installer finishes, press Enter to continue."
     read -r _
+    # Loop until CLT is actually present (users sometimes press Enter too early)
+    until /usr/bin/xcode-select -p >/dev/null 2>&1; do
+      echo "…still not detected. Finish the CLT installer, then press Enter to check again."
+      read -r _
+    done
+    echo "[✓] Xcode Command Line Tools detected."
   fi
 
-  echo "[*] Caching sudo (enter your macOS password once)…"
-  if sudo -v; then
-    ( while true; do sudo -n true; sleep 60; kill -0 "$$" || exit; done ) 2>/dev/null &
-  else
-    echo "[!] Could not cache sudo; Homebrew may prompt or fail if you aren't an Admin." >&2
-  fi
-
-  if ! command -v brew >/dev/null 2>&1; then
+  # Install Homebrew if missing
+  if ! need_cmd brew; then
     echo "[*] Installing Homebrew…"
     NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
   fi
 
-  local BREW_BIN
-  if   [ -x /opt/homebrew/bin/brew ]; then BREW_BIN=/opt/homebrew/bin/brew
-  elif [ -x /usr/local/bin/brew ]; then BREW_BIN=/usr/local/bin/brew
-  else BREW_BIN="$(command -v brew)"; fi
+  # Determine brew path and activate in this shell
+  if [ -x /opt/homebrew/bin/brew ]; then
+    BREW_BIN=/opt/homebrew/bin/brew
+  elif [ -x /usr/local/bin/brew ]; then
+    BREW_BIN=/usr/local/bin/brew
+  else
+    # last resort: whatever is in PATH
+    BREW_BIN="$(command -v brew)"
+  fi
 
-  local SHELLENV_LINE='eval "$('"$BREW_BIN"' shellenv)"'
-  ensure_line "$HOME/.zprofile" "$SHELLENV_LINE"
+  # Add shellenv to ~/.zprofile if not already there, and eval it now
+  SHELLENV_LINE='eval "$('"$BREW_BIN"' shellenv)"'
+  if ! grep -Fq "$SHELLENV_LINE" "$HOME/.zprofile" 2>/dev/null; then
+    echo "$SHELLENV_LINE" >> "$HOME/.zprofile"
+  fi
   eval "$("$BREW_BIN" shellenv)"
 
-  echo "[*] Installing core tools…"
+  echo "[*] brew update && essentials…"
   brew update
-  brew install git curl wget tree macvim gh the_silver_searcher || true
-  brew install --cask iterm2 brave-browser || true
+  brew install git curl wget tree macvim || true
+  brew install --cask iterm2 || true
 
-  echo "[*] Setting up Oh My Zsh and Powerlevel10k…"
-  if [ ! -d "$HOME/.oh-my-zsh" ]; then
-    RUNZSH=no CHSH=no KEEP_ZSHRC=yes \
-      sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
-  fi
-
-  # Fonts for P10k (ignore failures if tap/layout changes)
-  brew install --cask font-meslo-lg-nerd-font || true
-
-  local ZSH_CUSTOM="${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}"
-  if [ ! -d "$ZSH_CUSTOM/themes/powerlevel10k" ]; then
-    git clone --depth=1 https://github.com/romkatv/powerlevel10k.git "$ZSH_CUSTOM/themes/powerlevel10k"
-  fi
-
-  # New: deps for robust sourcing
-  brew install zsh-syntax-highlighting || true
-  curl -fsSL https://iterm2.com/shell_integration/zsh -o "$HOME/.iterm2_shell_integration.zsh" || true
-
-  # Inject robust OMZ block if needed (if repo doesn't provide zshrc later, setup_shell_env will also ensure it)
-  ensure_block "$HOME/.zshrc" "# >>> RAPID OMZ START" "# >>> RAPID OMZ END" "$OMZ_BLOCK"
+  ensure_vim_configs
 }
 
-# ---------- Linux setup ----------
+# ---------- Linux ----------
 linux_setup() {
   echo "[*] Detected Linux"
-  local SUDO=""; command -v sudo >/dev/null 2>&1 && SUDO="sudo"
-  if command -v apt >/dev/null 2>&1; then
+  if need_cmd apt; then
+    SUDO="$(have_sudo && echo sudo || echo "")"
     $SUDO apt update -y
-    $SUDO apt install -y git curl wget tree vim-gtk3 gh silversearcher-ag || true
-  elif command -v dnf >/dev/null 2>&1; then
-    $SUDO dnf install -y git curl wget tree gvim gh the_silver_searcher || true
-  elif command -v pacman >/dev/null 2>&1; then
-    $SUDO pacman -Syu --noconfirm git curl wget tree gvim github-cli the_silver_searcher || true
-  fi
-}
-
-# ---------- Repo clone / refresh ----------
-clone_repo() {
-  echo "[*] Getting your repo: $RS_REPO_SLUG@$RS_BRANCH → $RS_DEST"
-  if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
-    echo "[*] Using gh clone (fresh copy)…"
-    rm -rf "$RS_DEST"
-    gh repo clone "$RS_REPO_SLUG" "$RS_DEST" -- --depth=1 --branch "$RS_BRANCH"
+    $SUDO apt install -y git curl wget tree vim-gtk3 tar
+  elif need_cmd dnf; then
+    SUDO="$(have_sudo && echo sudo || echo "")"
+    $SUDO dnf install -y git curl wget tree gvim tar
+  elif need_cmd pacman; then
+    SUDO="$(have_sudo && echo sudo || echo "")"
+    $SUDO pacman -Syu --noconfirm git curl wget tree gvim tar
   else
+    echo "Unsupported Linux distro (apt/dnf/pacman not found)." >&2
+    exit 1
+  fi
+  ensure_vim_configs
+}
+
+# ---------- Shared helpers ----------
+ensure_vim_configs() {
+  if [ ! -f "$HOME/.vimrc" ]; then
+    cat > "$HOME/.vimrc" <<'EOF'
+set nocompatible
+set number relativenumber
+set tabstop=2 shiftwidth=2 expandtab
+set mouse=a
+syntax on
+filetype plugin indent on
+set clipboard=unnamedplus
+EOF
+    echo "[✓] Wrote $HOME/.vimrc"
+  fi
+
+  if [ ! -f "$HOME/.gvimrc" ]; then
+    cat > "$HOME/.gvimrc" <<'EOF'
+set lines=40 columns=120
+EOF
+    echo "[✓] Wrote $HOME/.gvimrc"
+  fi
+}
+
+download_tarball() {
+  local url="https://github.com/${RS_REPO_SLUG}/archive/refs/heads/${RS_BRANCH}.tar.gz"
+  local tmpdir; tmpdir="$(mktemp -d)"
+  echo "[*] Fetching repo tarball: $url"
+  curl -fsSL "$url" -o "$tmpdir/repo.tar.gz"
+  mkdir -p "$RS_DEST"
+  tar -xzf "$tmpdir/repo.tar.gz" -C "$tmpdir"
+  # Move extracted folder (named <reponame>-<branch>) into RS_DEST
+  local src_dir
+  src_dir="$(find "$tmpdir" -maxdepth 1 -type d -name "$(basename "$RS_REPO_SLUG")-$RS_BRANCH" -o -name "$(basename "$RS_REPO_SLUG")-*" | head -n1)"
+  if [ -z "$src_dir" ] || [ ! -d "$src_dir" ]; then
+    echo "[!] Could not locate extracted repo dir; leaving tarball in $tmpdir" >&2
+    return 1
+  fi
+  shopt -s dotglob
+  cp -R "$src_dir"/* "$RS_DEST"/
+  shopt -u dotglob
+  echo "[✓] Repo contents placed in $RS_DEST"
+}
+
+clone_repo() {
+  if [ "${RS_SKIP_CLONE:-0}" = "1" ]; then
+    echo "[*] RS_SKIP_CLONE=1 set; skipping repo fetch."
+    return 0
+  fi
+
+  echo "[*] Getting your repo: $RS_REPO_SLUG@$RS_BRANCH → $RS_DEST"
+  if need_cmd git; then
     if [ -d "$RS_DEST/.git" ]; then
-      echo "[*] Existing repo — refreshing from remote…"
-      ( cd "$RS_DEST" && git fetch origin "$RS_BRANCH" --depth=1 && git reset --hard "origin/$RS_BRANCH" && git clean -fdx )
+      echo "[*] Repo exists; pulling latest…"
+      git -C "$RS_DEST" fetch --depth=1 origin "$RS_BRANCH" || true
+      git -C "$RS_DEST" checkout "$RS_BRANCH" || true
+      git -C "$RS_DEST" pull --ff-only || true
     else
-      git clone --depth=1 --branch "$RS_BRANCH" "https://github.com/${RS_REPO_SLUG}.git" "$RS_DEST"
+      mkdir -p "$(dirname "$RS_DEST")"
+      git clone --depth=1 --branch "$RS_BRANCH" "https://github.com/ToddFute/${RS_REPO_SLUG##*/}.git" "$RS_DEST"
     fi
+    echo "[✓] Repo ready at $RS_DEST"
+  else
+    echo "[*] git not found; using tarball method."
+    download_tarball
   fi
-  echo "[✓] Repo ready."
 }
 
-# ---------- Run requested task scripts (bootstrap_<name>.sh) ----------
-run_tasks() {
-  if (( ${#BOOTSTRAP_PARAMS[@]} )); then
-    echo "[*] Running requested task bootstrap scripts: ${BOOTSTRAP_PARAMS[*]}"
+run_repo_bootstrap() {
+  if [ -x "$RS_DEST/bootstrap.sh" ]; then
+    echo "[*] Running repo bootstrap.sh…"
+    (cd "$RS_DEST" && bash ./bootstrap.sh)
+  elif [ -x "$RS_DEST/macos/setup.sh" ] && [ "$PLATFORM" = "macos" ]; then
+    echo "[*] Running macOS setup…"
+    (cd "$RS_DEST/macos" && bash ./setup.sh)
+  elif [ -x "$RS_DEST/linux/setup.sh" ] && [ "$PLATFORM" = "linux" ]; then
+    echo "[*] Running Linux setup…"
+    (cd "$RS_DEST/linux" && bash ./setup.sh)
+  else
+    echo "[i] No repo bootstrap found; base tools installed. You can customize later in $RS_DEST."
   fi
-  for task in "${BOOTSTRAP_PARAMS[@]}"; do
-    # allow only simple names like letters, numbers, _, -
-    if [[ ! "$task" =~ ^[A-Za-z0-9_-]+$ ]]; then
-      echo "[i] Ignoring non-task arg '$task'"
-      continue
-    fi
-    local script=""
-    for candidate in \
-      "$RS_DEST/bootstrap_${task}.sh" \
-      "$RS_DEST/bin_rapid/bootstrap_${task}.sh" \
-      "$HOME/bin/rapid/bootstrap_${task}.sh"
-    do
-      if [ -f "$candidate" ]; then script="$candidate"; break; fi
-    done
-    if [ -z "$script" ]; then
-      echo "[i] Skipping '${task}': no bootstrap_${task}.sh found."
-      continue
-    fi
-    echo "[*] Running $(basename "$script") …"
-    ( cd "$(dirname "$script")" && bash "./$(basename "$script")" )
-  done
 }
 
-# ---------- Main ----------
-echo "[-] Rapid bootstrap starting…"
-OS="$(uname -s)"
-case "$OS" in
-  Darwin) PLATFORM="macos"; mac_setup ;;
-  Linux)  PLATFORM="linux"; linux_setup ;;
-  *) echo "Unsupported OS: $OS" >&2; exit 1 ;;
-esac
+# ---------- Execute ----------
+if [ "$PLATFORM" = "macos" ]; then
+  mac_setup
+else
+  linux_setup
+fi
 
 clone_repo
-# Make repo shell scripts executable
-find "$RS_DEST" -type f -name "*.sh" -exec chmod +x {} \; || true
-
-install_rapid_bin
-install_dotfiles_from_repo
-setup_shell_env
-run_tasks
+run_repo_bootstrap
 
 echo "[✓] Bootstrap finished."
