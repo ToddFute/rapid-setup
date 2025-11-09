@@ -8,7 +8,7 @@ BRANCH="main"
 echo "[*] Getting your repo: ToddFute/rapid-setup@$BRANCH → $TMP_REPO"
 
 # Always start clean
-if [ -d "$TMP_REPO" ]; then
+if [ -d "$TMP_REPO/.git" ]; then
   echo "[i] Removing previous temp clone at $TMP_REPO"
   rm -rf "$TMP_REPO"
 fi
@@ -28,12 +28,19 @@ echo "[✓] Repo ready at $TMP_REPO"
 echo "[*] Installing dotfiles and rapid scripts from repo..."
 mkdir -p "$HOME/bin/rapid"
 
-cp -R "$TMP_REPO/bin_rapid/"* "$HOME/bin/rapid/" 2>/dev/null || true
-cp -R "$TMP_REPO/dotfiles/"* "$HOME/" 2>/dev/null || true
+if [ -d "$TMP_REPO/bin_rapid" ]; then
+  cp -R "$TMP_REPO/bin_rapid/"* "$HOME/bin/rapid/" 2>/dev/null || true
+fi
+
+if [ -d "$TMP_REPO/dotfiles" ]; then
+  cp -R "$TMP_REPO/dotfiles/"* "$HOME/" 2>/dev/null || true
+fi
 
 # Ensure executables have the right perms
 chmod -R +x "$HOME/bin/rapid" 2>/dev/null || true
 echo "[✓] Copied repo tools into $HOME/bin/rapid"
 
-# Cleanup temp repo if you don’t want to keep it
-rm -rf "$TMP_REPO"
+# ----------------------------------------------------------------------
+# Keep TMP_REPO for inspection
+# ----------------------------------------------------------------------
+echo "[i] Temporary repo retained at $TMP_REPO (not removed)."
