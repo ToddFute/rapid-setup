@@ -1,189 +1,39 @@
-#!/usr/bin/env bash
-set -euo pipefail
+# ----------------------------------------------------------------------
+# Clone the repo fresh each time (avoid diverged local branches)
+# ----------------------------------------------------------------------
+TMP_REPO="/tmp/rapid-setup"
+REPO_URL="https://github.com/ToddFute/rapid-setup.git"
+BRANCH="main"
 
-# ========= Configurable bits =========
-RS_REPO_SLUG="${RS_REPO_SLUG:-ToddFute/rapid-setup}"   # <— set your real default
-RS_BRANCH="${RS_BRANCH:-main}"
-RS_DEST="${RS_DEST:-$HOME/rapid-setup}"
-# =====================================
+echo "[*] Getting your repo: ToddFute/rapid-setup@$BRANCH → $TMP_REPO"
 
-echo "[-] Rapid bootstrap starting…"
-OS="$(uname -s)"
-case "$OS" in
-  Darwin) PLATFORM="macos" ;;
-  Linux)  PLATFORM="linux" ;;
-  *) echo "Unsupported OS: $OS" >&2; exit 1 ;;
-esac
-
-need_cmd() { command -v "$1" >/dev/null 2>&1; }
-have_sudo() { command -v sudo >/dev/null 2>&1; }
-
-# ---------- macOS ----------
-mac_setup() {
-  echo "[*] Detected macOS"
-
-  # Homebrew must not run as root on macOS
-  if [ "${EUID:-$(id -u)}" -eq 0 ]; then
-    echo "Don't run this script with sudo on macOS. Re-run as your normal user." >&2
-    exit 1
-  fi
-
-  # Ensure Xcode Command Line Tools (needed by Homebrew)
-  if ! /usr/bin/xcode-select -p >/dev/null 2>&1; then
-    echo "[*] Installing Xcode Command Line Tools (a dialog may appear)…"
-    xcode-select --install || true
-    echo
-    echo ">>> After the installer finishes, press Enter to continue."
-    read -r _
-    # Loop until CLT is actually present (users sometimes press Enter too early)
-    until /usr/bin/xcode-select -p >/dev/null 2>&1; do
-      echo "…still not detected. Finish the CLT installer, then press Enter to check again."
-      read -r _
-    done
-    echo "[✓] Xcode Command Line Tools detected."
-  fi
-
-  # Install Homebrew if missing
-  if ! need_cmd brew; then
-    echo "[*] Installing Homebrew…"
-    NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-  fi
-
-  # Determine brew path and activate in this shell
-  if [ -x /opt/homebrew/bin/brew ]; then
-    BREW_BIN=/opt/homebrew/bin/brew
-  elif [ -x /usr/local/bin/brew ]; then
-    BREW_BIN=/usr/local/bin/brew
-  else
-    # last resort: whatever is in PATH
-    BREW_BIN="$(command -v brew)"
-  fi
-
-  # Add shellenv to ~/.zprofile if not already there, and eval it now
-  SHELLENV_LINE='eval "$('"$BREW_BIN"' shellenv)"'
-  if ! grep -Fq "$SHELLENV_LINE" "$HOME/.zprofile" 2>/dev/null; then
-    echo "$SHELLENV_LINE" >> "$HOME/.zprofile"
-  fi
-  eval "$("$BREW_BIN" shellenv)"
-
-  echo "[*] brew update && essentials…"
-  brew update
-  brew install git curl wget tree macvim || true
-  brew install --cask iterm2 || true
-
-  ensure_vim_configs
-}
-
-# ---------- Linux ----------
-linux_setup() {
-  echo "[*] Detected Linux"
-  if need_cmd apt; then
-    SUDO="$(have_sudo && echo sudo || echo "")"
-    $SUDO apt update -y
-    $SUDO apt install -y git curl wget tree vim-gtk3 tar
-  elif need_cmd dnf; then
-    SUDO="$(have_sudo && echo sudo || echo "")"
-    $SUDO dnf install -y git curl wget tree gvim tar
-  elif need_cmd pacman; then
-    SUDO="$(have_sudo && echo sudo || echo "")"
-    $SUDO pacman -Syu --noconfirm git curl wget tree gvim tar
-  else
-    echo "Unsupported Linux distro (apt/dnf/pacman not found)." >&2
-    exit 1
-  fi
-  ensure_vim_configs
-}
-
-# ---------- Shared helpers ----------
-ensure_vim_configs() {
-  if [ ! -f "$HOME/.vimrc" ]; then
-    cat > "$HOME/.vimrc" <<'EOF'
-set nocompatible
-set number relativenumber
-set tabstop=2 shiftwidth=2 expandtab
-set mouse=a
-syntax on
-filetype plugin indent on
-set clipboard=unnamedplus
-EOF
-    echo "[✓] Wrote $HOME/.vimrc"
-  fi
-
-  if [ ! -f "$HOME/.gvimrc" ]; then
-    cat > "$HOME/.gvimrc" <<'EOF'
-set lines=40 columns=120
-EOF
-    echo "[✓] Wrote $HOME/.gvimrc"
-  fi
-}
-
-download_tarball() {
-  local url="https://github.com/${RS_REPO_SLUG}/archive/refs/heads/${RS_BRANCH}.tar.gz"
-  local tmpdir; tmpdir="$(mktemp -d)"
-  echo "[*] Fetching repo tarball: $url"
-  curl -fsSL "$url" -o "$tmpdir/repo.tar.gz"
-  mkdir -p "$RS_DEST"
-  tar -xzf "$tmpdir/repo.tar.gz" -C "$tmpdir"
-  # Move extracted folder (named <reponame>-<branch>) into RS_DEST
-  local src_dir
-  src_dir="$(find "$tmpdir" -maxdepth 1 -type d -name "$(basename "$RS_REPO_SLUG")-$RS_BRANCH" -o -name "$(basename "$RS_REPO_SLUG")-*" | head -n1)"
-  if [ -z "$src_dir" ] || [ ! -d "$src_dir" ]; then
-    echo "[!] Could not locate extracted repo dir; leaving tarball in $tmpdir" >&2
-    return 1
-  fi
-  shopt -s dotglob
-  cp -R "$src_dir"/* "$RS_DEST"/
-  shopt -u dotglob
-  echo "[✓] Repo contents placed in $RS_DEST"
-}
-
-clone_repo() {
-  if [ "${RS_SKIP_CLONE:-0}" = "1" ]; then
-    echo "[*] RS_SKIP_CLONE=1 set; skipping repo fetch."
-    return 0
-  fi
-
-  echo "[*] Getting your repo: $RS_REPO_SLUG@$RS_BRANCH → $RS_DEST"
-  if need_cmd git; then
-    if [ -d "$RS_DEST/.git" ]; then
-      echo "[*] Repo exists; pulling latest…"
-      git -C "$RS_DEST" fetch --depth=1 origin "$RS_BRANCH" || true
-      git -C "$RS_DEST" checkout "$RS_BRANCH" || true
-      git -C "$RS_DEST" pull --ff-only || true
-    else
-      mkdir -p "$(dirname "$RS_DEST")"
-      git clone --depth=1 --branch "$RS_BRANCH" "https://github.com/ToddFute/${RS_REPO_SLUG##*/}.git" "$RS_DEST"
-    fi
-    echo "[✓] Repo ready at $RS_DEST"
-  else
-    echo "[*] git not found; using tarball method."
-    download_tarball
-  fi
-}
-
-run_repo_bootstrap() {
-  if [ -x "$RS_DEST/bootstrap.sh" ]; then
-    echo "[*] Running repo bootstrap.sh…"
-    (cd "$RS_DEST" && bash ./bootstrap.sh)
-  elif [ -x "$RS_DEST/macos/setup.sh" ] && [ "$PLATFORM" = "macos" ]; then
-    echo "[*] Running macOS setup…"
-    (cd "$RS_DEST/macos" && bash ./setup.sh)
-  elif [ -x "$RS_DEST/linux/setup.sh" ] && [ "$PLATFORM" = "linux" ]; then
-    echo "[*] Running Linux setup…"
-    (cd "$RS_DEST/linux" && bash ./setup.sh)
-  else
-    echo "[i] No repo bootstrap found; base tools installed. You can customize later in $RS_DEST."
-  fi
-}
-
-# ---------- Execute ----------
-if [ "$PLATFORM" = "macos" ]; then
-  mac_setup
-else
-  linux_setup
+# Always start clean
+if [ -d "$TMP_REPO" ]; then
+  echo "[i] Removing previous temp clone at $TMP_REPO"
+  rm -rf "$TMP_REPO"
 fi
 
-clone_repo
-run_repo_bootstrap
+echo "[*] Cloning fresh copy..."
+if command -v gh >/dev/null 2>&1; then
+  gh repo clone ToddFute/rapid-setup "$TMP_REPO" -- --branch "$BRANCH" --depth=1
+else
+  git clone --depth=1 --branch "$BRANCH" "$REPO_URL" "$TMP_REPO"
+fi
 
-echo "[✓] Bootstrap finished."
+echo "[✓] Repo ready at $TMP_REPO"
+
+# ----------------------------------------------------------------------
+# Sync desired directories from the temp clone into the user's home
+# ----------------------------------------------------------------------
+echo "[*] Installing dotfiles and rapid scripts from repo..."
+mkdir -p "$HOME/bin/rapid"
+
+cp -R "$TMP_REPO/bin_rapid/"* "$HOME/bin/rapid/" 2>/dev/null || true
+cp -R "$TMP_REPO/dotfiles/"* "$HOME/" 2>/dev/null || true
+
+# Ensure executables have the right perms
+chmod -R +x "$HOME/bin/rapid" 2>/dev/null || true
+echo "[✓] Copied repo tools into $HOME/bin/rapid"
+
+# Cleanup temp repo if you don’t want to keep it
+rm -rf "$TMP_REPO"
