@@ -84,8 +84,6 @@ _mapped_target_name() {
   esac
 }
 
-}
-
 install_dotfiles_from_repo() {
   local SRC_DIR=""
   if [ -d "$RS_DEST/dotfiles" ]; then
