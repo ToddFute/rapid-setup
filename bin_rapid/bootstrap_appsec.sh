@@ -1,41 +1,50 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# shellcheck source=/dev/null
+. "$(dirname "${BASH_SOURCE[0]}")/lib/bootstrap_common.sh"
+
 echo "[*] Running $(basename "$0") …"
 
-OS="$(uname -s)"
-case "$OS" in
-  Darwin)
-    echo "[*] Installing AppSec tools (TruffleHog, Gitleaks)…"
-    if ! command -v brew >/dev/null 2>&1; then
-      echo "[!] Homebrew not found; install brew first." >&2
-      exit 1
-    fi
-    brew install trufflehog gitleaks || true
-    echo "[✓] AppSec tools installed on macOS."
-    ;;
+if on_macos; then
+  section "Installing AppSec tools (TruffleHog, Gitleaks) with Homebrew"
+  need_cmd brew || fail "Homebrew not found; install brew first."
+  brew install trufflehog gitleaks || true
+  ok "AppSec tools installed on macOS."
 
-  Linux)
-    echo "[*] Installing AppSec tools on Linux…"
-    if command -v apt >/dev/null 2>&1; then
-      sudo apt update -y
-      sudo apt install -y python3-pip wget unzip || true
-      pip install --user trufflehog || true
-      curl -sSL https://github.com/gitleaks/gitleaks/releases/latest/download/gitleaks_$(uname -s)_x64.tar.gz \
-        | sudo tar -xz -C /usr/local/bin gitleaks || true
-    elif command -v dnf >/dev/null 2>&1; then
-      sudo dnf install -y python3-pip wget unzip || true
-      pip install --user trufflehog || true
-      curl -sSL https://github.com/gitleaks/gitleaks/releases/latest/download/gitleaks_$(uname -s)_x64.tar.gz \
-        | sudo tar -xz -C /usr/local/bin gitleaks || true
-    else
-      echo "[!] Unsupported package manager for automatic AppSec setup." >&2
-      exit 1
+elif on_linux; then
+  section "Installing AppSec tools on Linux"
+  if need_cmd apt; then
+    sudo apt update -y
+    # TruffleHog via pipx
+    if ! need_cmd pipx; then
+      sudo apt install -y python3-pip pipx || true
+      python3 -m pipx ensurepath || true
     fi
-    echo "[✓] AppSec tools installed on Linux."
-    ;;
+    pipx install trufflehog || true
 
-  *)
-    echo "[!] Unsupported OS: $OS" >&2
-    exit 1
-    ;;
-esac
+    # Gitleaks via official install script (handles arch/version)
+    curl -sfL https://raw.githubusercontent.com/gitleaks/gitleaks/master/install.sh | sudo bash || true
+    ok "AppSec tools installed on Linux (APT)."
+
+  elif need_cmd dnf; then
+    sudo dnf install -y python3-pip || true
+    if ! need_cmd pipx; then
+      python3 -m pip install --user pipx || true
+      python3 -m pipx ensurepath || true
+      export PATH="$HOME/.local/bin:$PATH"
+    fi
+    pipx install trufflehog || true
+    curl -sfL https://raw.githubusercontent.com/gitleaks/gitleaks/master/install.sh | sudo bash || true
+    ok "AppSec tools installed on Linux (DNF)."
+
+  else
+    fail "Unsupported Linux package manager for automatic AppSec setup."
+  fi
+
+else
+  fail "Unsupported OS."
+fi
+
+# Print versions if available
+{ command -v trufflehog >/dev/null 2>&1 && trufflehog --version || true; } | sed 's/^/[i] /'
+{ command -v gitleaks   >/dev/null 2>&1 && gitleaks   version     || true; } | sed 's/^/[i] /'

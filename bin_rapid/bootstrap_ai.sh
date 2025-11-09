@@ -13,29 +13,29 @@ ollama_url="http://localhost:11434"
 
 wait_for_ollama() {
   local secs="${1:-$AI_WAIT_SECS}"
-  echo "[i] Waiting up to ${secs}s for Ollama service…"
+  info "Waiting up to ${secs}s for Ollama service…"
   local i
   for i in $(seq 1 "$secs"); do
     if curl -fsS "${ollama_url}/api/tags" >/dev/null 2>&1; then
-      echo "[✓] Ollama is responding."
+      ok "Ollama is responding."
       return 0
     fi
     sleep 1
   done
-  echo "[!] Ollama did not respond within ${secs}s." >&2
+  warn "Ollama did not respond within ${secs}s."
   return 1
 }
 
 pull_models_if_requested() {
   if [ "${AI_PULL_MODELS}" != "1" ]; then
-    echo "[i] Skipping model pulls (set AI_PULL_MODELS=1 to enable)."
+    info "Skipping model pulls (set AI_PULL_MODELS=1 to enable)."
     return 0
   fi
   if ! command -v ollama >/dev/null 2>&1; then
-    echo "[i] ollama CLI not found; skipping model pulls." >&2
+    warn "ollama CLI not found; skipping model pulls."
     return 0
   fi
-  echo "[*] Pulling models: ${AI_MODELS}"
+  section "Pulling models"
   # shellcheck disable=SC2086
   for m in ${AI_MODELS}; do
     ollama pull "$m" || true
@@ -43,18 +43,16 @@ pull_models_if_requested() {
 }
 
 install_aider_with_fallback() {
-  # Try Homebrew first; if aider not present after, fall back to pipx.
   if need_cmd brew; then
     brew install aider || true
     if ! command -v aider >/dev/null 2>&1; then
-      echo "[i] Installing Aider via pipx (fallback)…"
+      info "Installing Aider via pipx (fallback)…"
       brew install pipx || true
       command -v pipx >/dev/null 2>&1 || python3 -m pip install --user pipx || true
       command -v pipx >/dev/null 2>&1 || python3 -m pipx ensurepath || true
       pipx install aider-chat || true
     fi
   else
-    # Non-brew environments (Linux)
     if ! command -v pipx >/dev/null 2>&1; then
       if need_cmd apt; then
         sudo apt update -y || true
@@ -70,14 +68,12 @@ install_aider_with_fallback() {
   fi
 }
 
-if on_macos; then
-  if ! need_cmd brew; then
-    echo "[!] Homebrew not found on macOS. Install brew first." >&2
-    exit 1
-  fi
+echo "[*] Running $(basename "$0") …"
 
-  echo "[*] Installing AI tools (Ollama, Aider, Expect)…"
-  # Ollama app (daemon provided by the app)
+if on_macos; then
+  need_cmd brew || fail "Homebrew not found on macOS. Install brew first."
+
+  section "Installing AI tools (Ollama, Aider, Expect)"
   brew install --cask ollama || true
 
   # Ensure the daemon is initialized at least once
@@ -89,19 +85,15 @@ if on_macos; then
     read -r _
   fi
 
-  # Expect + Aider
   brew install expect || true
   install_aider_with_fallback
 
-  # Wait for service & optionally pull models
   wait_for_ollama || true
   pull_models_if_requested
-
-  echo "[✓] AI tools installed on macOS."
+  ok "AI tools installed on macOS."
 
 elif on_linux; then
-  echo "[*] Installing AI tools on Linux…"
-  # Expect + Aider via pipx
+  section "Installing AI tools on Linux"
   if need_cmd apt; then
     sudo apt update -y
     sudo apt install -y expect python3-pip || true
@@ -112,25 +104,19 @@ elif on_linux; then
   fi
   install_aider_with_fallback
 
-  # Ollama install (opt-in: AI_LINUX_INSTALL_OLLAMA=1)
   if [ "${AI_LINUX_INSTALL_OLLAMA}" = "1" ]; then
-    echo "[*] Installing Ollama via official script…"
-    # You can disable this block if you prefer manual install for security policy reasons.
-    curl -fsSL https://ollama.com/install.sh | sh || {
-      echo "[!] Ollama installation script failed (continuing without Ollama)." >&2
-    }
-    # Try to start (varies by distro; user may need to log out/in)
+    section "Installing Ollama via official script"
+    curl -fsSL https://ollama.com/install.sh | sh || warn "Ollama installation script failed (continuing without Ollama)."
     (command -v systemctl >/dev/null 2>&1 && sudo systemctl start ollama) || true
     wait_for_ollama || true
     pull_models_if_requested
   else
-    echo "[i] Not installing Ollama automatically on Linux. Set AI_LINUX_INSTALL_OLLAMA=1 to enable."
-    echo "    See: https://ollama.ai/download"
+    info "Not installing Ollama automatically on Linux (AI_LINUX_INSTALL_OLLAMA=1 to enable)."
+    info "See: https://ollama.ai/download"
   fi
 
-  echo "[✓] AI tools installed on Linux."
+  ok "AI tools installed on Linux."
 
 else
-  echo "[!] Unsupported OS." >&2
-  exit 1
+  fail "Unsupported OS."
 fi
