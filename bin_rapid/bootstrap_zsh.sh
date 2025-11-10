@@ -1,26 +1,12 @@
 #!/usr/bin/env bash
-# bootstrap_zsh.sh — macOS-safe Zsh bootstrap
-# - Avoids BSD sed issues by using awk for block management
-# - Guards all source lines so missing files don't explode
-# - Places p10k Instant Prompt near the top of ~/.zshrc
-# - Reloads properly (exec zsh -l if not already in zsh)
-
+# bootstrap_zsh.sh — ensure Oh My Zsh, Powerlevel10k, and sane defaults
 set -euo pipefail
 
-# -------- pretty logging --------
 info() { printf "\033[1;34m[ZSH]\033[0m %s\n" "$*"; }
 ok()   { printf "\033[1;32m[✓]\033[0m %s\n" "$*"; }
 warn() { printf "\033[1;33m[!]\033[0m %s\n" "$*" >&2; }
 die()  { printf "\033[1;31m[✗]\033[0m %s\n" "$*" >&2; exit 1; }
 
-ZSHRC="$HOME/.zshrc"
-OMZ_DIR="$HOME/.oh-my-zsh"
-ITERM_SHELL="$HOME/.iterm2_shell_integration.zsh"
-FUNC_DIR="$HOME/.zsh/functional"
-FUNC_PLUGIN="$FUNC_DIR/functional.plugin.zsh"
-
-# -------- helpers (macOS-safe) --------
-# Remove a managed block delimited by exact BEGIN/END marker lines.
 remove_block() {
   local file="$1" begin="$2" end="$3"
   [ -f "$file" ] || return 0
@@ -31,7 +17,6 @@ remove_block() {
   ' "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
 }
 
-# Upsert a managed block (remove old, then append new content at end).
 upsert_block() {
   local file="$1" begin="$2" end="$3" content="$4"
   [ -f "$file" ] || touch "$file"
@@ -43,112 +28,111 @@ upsert_block() {
   } >> "$file"
 }
 
-# Insert a single line near the very top (after shebang if present), only if absent.
-ensure_line_near_top() {
-  local file="$1" needle="$2"
-  [ -f "$file" ] || touch "$file"
-  grep -Fqx "$needle" "$file" 2>/dev/null && return 0
-  if head -1 "$file" | grep -qE '^#!'; then
-    { head -1 "$file"; echo "$needle"; tail -n +2 "$file"; } > "${file}.tmp" && mv "${file}.tmp" "$file"
-  else
-    { echo "$needle"; cat "$file"; } > "${file}.tmp" && mv "${file}.tmp" "$file"
-  fi
-}
+ZSHRC="$HOME/.zshrc"
+ZSH_DIR="$HOME/.oh-my-zsh"
 
-# -------- ensure ~/.zshrc exists --------
 info "Ensuring ~/.zshrc exists…"
-[ -f "$ZSHRC" ] || { touch "$ZSHRC"; ok "Created $ZSHRC"; }
+touch "$ZSHRC"
 
-# -------- optional: install Oh My Zsh (unattended) --------
-if [ ! -d "$OMZ_DIR" ]; then
-  info "Oh My Zsh not found. Install it? (y/N)"
-  read -r ans
-  if [[ "${ans:-N}" =~ ^[Yy]$ ]]; then
-    info "Installing Oh My Zsh (unattended)…"
-    RUNZSH=no CHSH=no KEEP_ZSHRC=yes \
-    sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" || warn "Oh My Zsh install skipped/failed."
-  else
-    warn "Skipping Oh My Zsh install."
-  fi
+# -------- Install Oh My Zsh --------
+if [ ! -d "$ZSH_DIR" ]; then
+  info "Installing Oh My Zsh…"
+  RUNZSH=no KEEP_ZSHRC=yes sh -c \
+    "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" || true
 else
   info "Oh My Zsh already installed."
 fi
 
-# Upsert guarded Oh My Zsh source block
-OMZ_BLOCK_CONTENT='[ -s "$HOME/.oh-my-zsh/oh-my-zsh.sh" ] && source "$HOME/.oh-my-zsh/oh-my-zsh.sh"'
-upsert_block "$ZSHRC" \
-  "# >>> managed: oh-my-zsh" \
-  "# <<< managed: oh-my-zsh" \
-  "$OMZ_BLOCK_CONTENT"
-
-# -------- optional: install iTerm2 shell integration --------
-if [ ! -f "$ITERM_SHELL" ]; then
-  info "iTerm2 shell integration not found. Install it? (y/N)"
-  read -r ans
-  if [[ "${ans:-N}" =~ ^[Yy]$ ]]; then
-    info "Installing iTerm2 shell integration…"
-    curl -fsSL https://iterm2.com/shell_integration/zsh -o "$ITERM_SHELL" || warn "iTerm2 shell integration download failed."
-  else
-    warn "Skipping iTerm2 shell integration."
-  fi
-else
+# -------- iTerm2 shell integration --------
+if [ -f "$HOME/.iterm2_shell_integration.zsh" ]; then
   info "iTerm2 shell integration already present."
+else
+  info "Installing iTerm2 shell integration…"
+  curl -fsSL https://iterm2.com/shell_integration/zsh \
+    -o "$HOME/.iterm2_shell_integration.zsh" || warn "Could not install iTerm2 shell integration"
 fi
 
-ITERM_BLOCK_CONTENT='[ -s "$HOME/.iterm2_shell_integration.zsh" ] && source "$HOME/.iterm2_shell_integration.zsh"'
-upsert_block "$ZSHRC" \
-  "# >>> managed: iterm2-shell-integration" \
-  "# <<< managed: iterm2-shell-integration" \
-  "$ITERM_BLOCK_CONTENT"
-
-# -------- optional: zsh functional plugin (guarded) --------
-# If you have this repo locally, we’ll create the dir if missing and just guard-source it.
-if [ ! -f "$FUNC_PLUGIN" ]; then
-  info "zsh functional plugin not found at $FUNC_PLUGIN."
-  info "Create the folder for a manual plugin drop? (y/N)"
-  read -r ans
-  if [[ "${ans:-N}" =~ ^[Yy]$ ]]; then
-    mkdir -p "$FUNC_DIR"
-    ok "Created $FUNC_DIR (place functional.plugin.zsh there when ready)."
-  else
-    warn "Skipping functional plugin folder creation."
-  fi
+# -------- Powerlevel10k theme --------
+if [ ! -d "$ZSH_DIR/custom/themes/powerlevel10k" ]; then
+  info "Installing Powerlevel10k theme…"
+  git clone --depth=1 https://github.com/romkatv/powerlevel10k.git \
+    "$ZSH_DIR/custom/themes/powerlevel10k"
+else
+  info "Powerlevel10k already installed."
 fi
 
-FUNC_BLOCK_CONTENT='[ -s "$HOME/.zsh/functional/functional.plugin.zsh" ] && source "$HOME/.zsh/functional/functional.plugin.zsh"'
+# -------- Functional plugin --------
+if [ ! -f "$HOME/.zsh/functional/functional.plugin.zsh" ]; then
+  info "Installing zsh functional plugin…"
+  mkdir -p "$HOME/.zsh/functional"
+  curl -fsSL https://raw.githubusercontent.com/Tarrasch/zsh-functional/master/functional.plugin.zsh \
+    -o "$HOME/.zsh/functional/functional.plugin.zsh" || warn "Could not install zsh functional plugin"
+else
+  info "Functional plugin already present."
+fi
+
+# -------- Syntax highlighting --------
+if [ ! -f "/opt/homebrew/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" ]; then
+  info "Installing zsh-syntax-highlighting…"
+  brew install zsh-syntax-highlighting || warn "Could not install zsh-syntax-highlighting"
+else
+  info "zsh-syntax-highlighting already installed."
+fi
+
+# -------- pygmentize guard --------
+info "Ensuring pygmentize guard…"
+PYGMENTIZE_BLOCK_CONTENT='
+# Prevent zsh errors when pygmentize is missing
+if ! command -v pygmentize >/dev/null 2>&1; then
+  alias pygmentize="cat"
+fi
+'
 upsert_block "$ZSHRC" \
-  "# >>> managed: zsh-functional" \
-  "# <<< managed: zsh-functional" \
-  "$FUNC_BLOCK_CONTENT"
+  "# >>> managed: pygmentize-guard" \
+  "# <<< managed: pygmentize-guard" \
+  "$PYGMENTIZE_BLOCK_CONTENT"
 
-# -------- Powerlevel10k Instant Prompt line (must be near the top) --------
-# NOTE: this line uses zsh-specific ${(%)...} syntax; adding it to the file is fine.
-P10K_INSTANT='if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"; fi'
-ensure_line_near_top "$ZSHRC" "$P10K_INSTANT"
-
-# -------- Quality-of-life defaults (optional) --------
-# Keep these as a managed block you can edit/remove later.
+# -------- QoL block --------
 QOL_BLOCK_CONTENT='
-# macOS-friendly pager/term defaults
 export TERM=xterm-256color
 export LESS=-R
 export PAGER=less
+export EDITOR=vim
 '
 upsert_block "$ZSHRC" \
-  "# >>> managed: qol-defaults" \
-  "# <<< managed: qol-defaults" \
+  "# >>> managed: zsh-qol-defaults" \
+  "# <<< managed: zsh-qol-defaults" \
   "$QOL_BLOCK_CONTENT"
 
-ok "Updated $ZSHRC."
+# -------- Theme setup --------
+THEME_BLOCK_CONTENT='
+ZSH_THEME="powerlevel10k/powerlevel10k"
+[[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
+'
+upsert_block "$ZSHRC" \
+  "# >>> managed: zsh-theme" \
+  "# <<< managed: zsh-theme" \
+  "$THEME_BLOCK_CONTENT"
 
-# -------- reload safely --------
-# Don’t source zsh code from bash (prevents “bad substitution” errors)
-if [ -n "${ZSH_VERSION:-}" ]; then
-  info "Reloading ~/.zshrc in current zsh…"
-  # shellcheck disable=SC1090
-  source "$ZSHRC"
-  ok "Reloaded."
-else
-  info "Switching to a login zsh to apply changes…"
-  exec zsh -l
-fi
+# -------- Load shell extras --------
+LOAD_BLOCK_CONTENT='
+# Load iTerm2 integration
+[[ -f ~/.iterm2_shell_integration.zsh ]] && source ~/.iterm2_shell_integration.zsh
+
+# Load functional plugin
+[[ -f ~/.zsh/functional/functional.plugin.zsh ]] && source ~/.zsh/functional/functional.plugin.zsh
+
+# Load syntax highlighting
+[[ -f /opt/homebrew/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ]] && \
+  source /opt/homebrew/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+'
+upsert_block "$ZSHRC" \
+  "# >>> managed: zsh-loads" \
+  "# <<< managed: zsh-loads" \
+  "$LOAD_BLOCK_CONTENT"
+
+ok "Reloading ~/.zshrc…"
+# shellcheck disable=SC1090
+source "$ZSHRC" || warn "Some startup warnings may appear on first load."
+
+ok "Zsh bootstrap complete."
