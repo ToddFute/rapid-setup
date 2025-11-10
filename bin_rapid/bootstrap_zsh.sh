@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# bootstrap_zsh.sh — ensure Oh My Zsh, Powerlevel10k, and sane defaults
+# bootstrap_zsh.sh — ensure Oh My Zsh, Powerlevel10k, syntax highlighting, functional plugin, and Pygments
 set -euo pipefail
 
 info() { printf "\033[1;34m[ZSH]\033[0m %s\n" "$*"; }
@@ -79,8 +79,17 @@ else
   info "zsh-syntax-highlighting already installed."
 fi
 
-# -------- pygmentize guard --------
-info "Ensuring pygmentize guard…"
+# -------- Install pygments if missing --------
+if ! command -v pygmentize >/dev/null 2>&1; then
+  info "Installing Pygments (provides pygmentize)…"
+  if command -v brew >/dev/null 2>&1; then
+    brew install pygments || warn "Homebrew Pygments install failed"
+  else
+    python3 -m pip install --user Pygments || warn "pip Pygments install failed"
+  fi
+fi
+
+# -------- pygmentize guard (fallback) --------
 PYGMENTIZE_BLOCK_CONTENT='
 # Prevent zsh errors when pygmentize is missing
 if ! command -v pygmentize >/dev/null 2>&1; then
