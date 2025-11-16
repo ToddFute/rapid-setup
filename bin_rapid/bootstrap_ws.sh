@@ -10,6 +10,25 @@ if ! on_macos; then
   exit 0
 fi
 
+section "Ensuring cloudflared is installed"
+if command -v cloudflared >/dev/null 2>&1; then
+  ok "cloudflared already installed at $(command -v cloudflared)"
+else
+  if command -v brew >/dev/null 2>&1; then
+    info "Installing cloudflared via Homebrew…"
+    # idempotent: install or upgrade if already present
+    brew install cloudflared >/dev/null 2>&1 || brew upgrade cloudflared >/dev/null 2>&1 || true
+
+    if command -v cloudflared >/dev/null 2>&1; then
+      ok "cloudflared installed."
+    else
+      info "Tried to install cloudflared, but it is still not on PATH."
+    fi
+  else
+    info "Homebrew not found; cannot auto-install cloudflared. Install it manually and re-run if needed."
+  fi
+fi
+
 section "Setting macOS screen lock to 10 minutes and requiring password"
 # Idle timeout in seconds
 defaults -currentHost write com.apple.screensaver idleTime -int 600
