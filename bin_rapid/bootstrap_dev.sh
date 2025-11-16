@@ -177,6 +177,26 @@ export PAGER=less
   ok "QoL env block ensured in $rc"
 }
 
+# -------- Cursor AI install --------
+install_cursor() {
+  # If Cursor is already installed, bail out early.
+  if [ -d "/Applications/Cursor.app" ]; then
+    ok "Cursor already installed."
+    return 0
+  fi
+
+  if ! command -v brew >/dev/null 2>&1; then
+    warn "Homebrew not found; cannot install Cursor automatically."
+    warn "Install Homebrew from https://brew.sh and then run: brew install --cask cursor"
+    return 1
+  fi
+
+  info "Installing / updating Cursor (Homebrew cask)…"
+  # Install or upgrade if present
+  brew install --cask cursor >/dev/null 2>&1 || brew upgrade --cask cursor >/dev/null 2>&1 || true
+  ok "Cursor installed (or already up to date)."
+}
+
 # ---------------- Main ----------------
 info "Developer bootstrap starting…"
 
@@ -200,6 +220,9 @@ fi
 if command -v jq >/dev/null 2>&1 || ensure_jq; then
   merge_vscode_settings
 fi
+
+# Install Cursor AI editor
+install_cursor
 
 install_qol_block
 
