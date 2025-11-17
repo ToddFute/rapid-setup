@@ -97,6 +97,14 @@ INSTRUCTIONS
   ok "Continuing with Cloudflare Tunnel setup."
 }
 
+dns_safe_name() {
+  local n
+  n="$(scutil --get LocalHostName 2>/dev/null || true)"
+  [ -n "$n" ] || n="$(scutil --get HostName 2>/dev/null || true)"
+  [ -n "$n" ] || n="$(hostname -s)"
+  printf '%s\n' "$n"
+}
+
 cloudflared_login() {
   info "Running 'cloudflared tunnel login' (this will open a browser to authenticate with Cloudflare)…"
   cloudflared tunnel login
@@ -195,7 +203,7 @@ main() {
   ensure_cloudflared
 
   local system_name
-  system_name="$(get_system_name)"
+  system_name="$(dns_safe_name)"
   local tunnel_name="${system_name}-remote"
   local config_dir="${HOME}/.cloudflared"
 
@@ -204,7 +212,7 @@ main() {
 
   # Ask what FQDN to use; provide a sensible default.
   local default_fqdn="${system_name}.your-domain.com"
-  printf "Hostname to use for this tunnel (FQDN) [${default_fqdn}]: "
+  printf "Enter the new computer name (short, letters/numbers only): "
   IFS= read -r fqdn
   fqdn="${fqdn:-$default_fqdn}"
   ok "Using hostname: ${fqdn}"
