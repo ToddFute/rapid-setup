@@ -1,40 +1,21 @@
 #!/usr/bin/env bash
 # bootstrap_dev.sh — macOS-friendly developer bootstrap
 # - Installs VS Code (Homebrew cask)
+# - Installs MacVim/gvim (Homebrew formula)
 # - Ensures `code` CLI
 # - Installs VSCodeVim extension
 # - Optionally merges Vim-friendly settings via jq
 # - Uses same helper style as other bootstrap scripts (no sed -i)
 
 set -euo pipefail
+# shellcheck source=/dev/null
+. "$(dirname "${BASH_SOURCE[0]}")/lib/bootstrap_common.sh"
 
 # -------- pretty logging --------
 info() { printf "\033[1;34m[DEV]\033[0m %s\n" "$*"; }
 ok()   { printf "\033[1;32m[✓]\033[0m %s\n" "$*"; }
 warn() { printf "\033[1;33m[!]\033[0m %s\n" "$*" >&2; }
 die()  { printf "\033[1;31m[✗]\033[0m %s\n" "$*" >&2; exit 1; }
-
-# -------- helpers (macOS-safe) --------
-remove_block() {
-  local file="$1" begin="$2" end="$3"
-  [ -f "$file" ] || return 0
-  awk -v begin="$begin" -v end="$end" '
-    $0==begin {skip=1; next}
-    $0==end   {skip=0; next}
-    !skip
-  ' "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
-}
-
-upsert_block() {
-  local file="$1" begin="$2" end="$3" content="$4"
-  [ -f "$file" ] || touch "$file"
-  remove_block "$file" "$begin" "$end"
-  {
-    printf "%s\n" "$begin"
-    printf "%s\n" "$content"
-    printf "%s\n" "$end"
-  } >> "$file"
-}
 
 is_apple_silicon() {
   [ "$(uname -s)" = "Darwin" ] || return 1
@@ -177,6 +158,17 @@ export PAGER=less
   ok "QoL env block ensured in $rc"
 }
 
+# -------- MacVim/gvim install --------
+install_gvim() {
+  info "Installing / updating MacVim (provides gvim)…"
+  brew install macvim >/dev/null 2>&1 || brew upgrade macvim >/dev/null 2>&1 || true
+  if command -v gvim >/dev/null 2>&1; then
+    ok "gvim installed at $(command -v gvim)."
+  else
+    warn "MacVim install finished, but gvim is not on PATH yet. Open a new shell and try again."
+  fi
+}
+
 # -------- Cursor AI install --------
 install_cursor() {
   # If Cursor is already installed, bail out early.
@@ -201,6 +193,8 @@ install_cursor() {
 info "Developer bootstrap starting…"
 
 ensure_brew
+
+install_gvim
 
 info "Installing / updating VS Code (Homebrew cask)…"
 brew install --cask visual-studio-code >/dev/null || brew upgrade --cask visual-studio-code >/dev/null || true

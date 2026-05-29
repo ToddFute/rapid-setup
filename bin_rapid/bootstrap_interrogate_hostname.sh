@@ -4,33 +4,14 @@
 # Also manages a /etc/hosts block safely & idempotently.
 
 set -euo pipefail
+# shellcheck source=/dev/null
+. "$(dirname "${BASH_SOURCE[0]}")/lib/bootstrap_common.sh"
 
 # ------------- utils -------------
 info() { printf "\033[1;34m[i]\033[0m %s\n" "$*"; }
 ok()   { printf "\033[1;32m[✓]\033[0m %s\n" "$*"; }
 warn() { printf "\033[1;33m[!]\033[0m %s\n" "$*" >&2; }
 die()  { printf "\033[1;31m[✗]\033[0m %s\n" "$*" >&2; exit 1; }
-
-remove_block() {
-  local file="$1" begin="$2" end="$3"
-  [ -f "$file" ] || return 0
-  awk -v begin="$begin" -v end="$end" '
-    $0==begin {skip=1; next}
-    $0==end   {skip=0; next}
-    !skip
-  ' "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
-}
-
-upsert_block() {
-  local file="$1" begin="$2" end="$3" content="$4"
-  [ -f "$file" ] || touch "$file"
-  remove_block "$file" "$begin" "$end"
-  {
-    printf "%s\n" "$begin"
-    printf "%s\n" "$content"
-    printf "%s\n" "$end"
-  } | sudo tee -a "$file" >/dev/null
-}
 
 sanitize_localhost() {
   # LocalHostName may include only A–Z, a–z, 0–9, and hyphen; no spaces.
@@ -109,7 +90,7 @@ interrogate_and_set_hostname() {
   local end="# <<< managed: hostname-bootstrap"
   local hosts_line="127.0.0.1   ${new_host} ${new_local}.local localhost"
   info "Updating /etc/hosts managed block…"
-  upsert_block "/etc/hosts" "$begin" "$end" "$hosts_line"
+  upsert_block_sudo "/etc/hosts" "$begin" "$end" "$hosts_line"
 
   # Flush caches
   info "Flushing DNS & caches…"

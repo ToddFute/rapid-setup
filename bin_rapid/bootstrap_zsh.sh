@@ -1,32 +1,13 @@
 #!/usr/bin/env bash
 # bootstrap_zsh.sh — ensure Oh My Zsh, Powerlevel10k, syntax highlighting, functional plugin, and Pygments
 set -euo pipefail
+# shellcheck source=/dev/null
+. "$(dirname "${BASH_SOURCE[0]}")/lib/bootstrap_common.sh"
 
 info() { printf "\033[1;34m[ZSH]\033[0m %s\n" "$*"; }
 ok()   { printf "\033[1;32m[✓]\033[0m %s\n" "$*"; }
 warn() { printf "\033[1;33m[!]\033[0m %s\n" "$*" >&2; }
 die()  { printf "\033[1;31m[✗]\033[0m %s\n" "$*" >&2; exit 1; }
-
-remove_block() {
-  local file="$1" begin="$2" end="$3"
-  [ -f "$file" ] || return 0
-  awk -v begin="$begin" -v end="$end" '
-    $0==begin {skip=1; next}
-    $0==end   {skip=0; next}
-    !skip
-  ' "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
-}
-
-upsert_block() {
-  local file="$1" begin="$2" end="$3" content="$4"
-  [ -f "$file" ] || touch "$file"
-  remove_block "$file" "$begin" "$end"
-  {
-    printf "%s\n" "$begin"
-    printf "%s\n" "$content"
-    printf "%s\n" "$end"
-  } >> "$file"
-}
 
 ZSHRC="$HOME/.zshrc"
 ZSH_DIR="$HOME/.oh-my-zsh"
@@ -62,13 +43,18 @@ else
 fi
 
 # -------- Functional plugin --------
-if [ ! -f "$HOME/.zsh/functional/functional.plugin.zsh" ]; then
-  info "Installing zsh functional plugin…"
-  mkdir -p "$HOME/.zsh/functional"
-  curl -fsSL https://raw.githubusercontent.com/Tarrasch/zsh-functional/master/functional.plugin.zsh \
-    -o "$HOME/.zsh/functional/functional.plugin.zsh" || warn "Could not install zsh functional plugin"
-else
+FUNCTIONAL_DIR="$HOME/.zsh/functional"
+if [ -f "$FUNCTIONAL_DIR/functional.plugin.zsh" ] && [ -d "$FUNCTIONAL_DIR/src" ]; then
   info "Functional plugin already present."
+elif [ -d "$FUNCTIONAL_DIR/.git" ]; then
+  info "Updating zsh functional plugin…"
+  git -C "$FUNCTIONAL_DIR" pull --ff-only || warn "Could not update zsh functional plugin"
+else
+  info "Installing zsh functional plugin…"
+  mkdir -p "$HOME/.zsh"
+  rm -rf "$FUNCTIONAL_DIR"
+  git clone --depth=1 https://github.com/Tarrasch/zsh-functional.git "$FUNCTIONAL_DIR" \
+    || warn "Could not install zsh functional plugin"
 fi
 
 # -------- Syntax highlighting --------

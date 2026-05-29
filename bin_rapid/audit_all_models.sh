@@ -6,6 +6,8 @@
 # - Reloads properly (exec zsh -l if not already in zsh)
 
 set -euo pipefail
+# shellcheck source=/dev/null
+. "$(dirname "${BASH_SOURCE[0]}")/lib/bootstrap_common.sh"
 
 # -------- pretty logging --------
 info() { printf "\033[1;34m[ZSH]\033[0m %s\n" "$*"; }
@@ -18,30 +20,6 @@ OMZ_DIR="$HOME/.oh-my-zsh"
 ITERM_SHELL="$HOME/.iterm2_shell_integration.zsh"
 FUNC_DIR="$HOME/.zsh/functional"
 FUNC_PLUGIN="$FUNC_DIR/functional.plugin.zsh"
-
-# -------- helpers (macOS-safe) --------
-# Remove a managed block delimited by exact BEGIN/END marker lines.
-remove_block() {
-  local file="$1" begin="$2" end="$3"
-  [ -f "$file" ] || return 0
-  awk -v begin="$begin" -v end="$end" '
-    $0==begin {skip=1; next}
-    $0==end   {skip=0; next}
-    !skip
-  ' "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
-}
-
-# Upsert a managed block (remove old, then append new content at end).
-upsert_block() {
-  local file="$1" begin="$2" end="$3" content="$4"
-  [ -f "$file" ] || touch "$file"
-  remove_block "$file" "$begin" "$end"
-  {
-    printf "%s\n" "$begin"
-    printf "%s\n" "$content"
-    printf "%s\n" "$end"
-  } >> "$file"
-}
 
 # Insert a single line near the very top (after shebang if present), only if absent.
 ensure_line_near_top() {

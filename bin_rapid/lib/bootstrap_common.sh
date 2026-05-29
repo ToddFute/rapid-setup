@@ -82,4 +82,47 @@ section() {
 # ----- Environment utilities -----
 is_root() { [ "${EUID:-$(id -u)}" -eq 0 ]; }
 
+# ----- Managed config blocks (macOS-safe; no sed -i) -----
+remove_block() {
+  local file="$1" begin="$2" end="$3"
+  [ -f "$file" ] || return 0
+  awk -v begin="$begin" -v end="$end" '
+    $0==begin {skip=1; next}
+    $0==end   {skip=0; next}
+    !skip
+  ' "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
+}
+
+upsert_block() {
+  local file="$1" begin="$2" end="$3" content="$4"
+  [ -f "$file" ] || touch "$file"
+  remove_block "$file" "$begin" "$end"
+  {
+    printf "%s\n" "$begin"
+    printf "%s\n" "$content"
+    printf "%s\n" "$end"
+  } >> "$file"
+}
+
+remove_block_sudo() {
+  local file="$1" begin="$2" end="$3"
+  [ -f "$file" ] || return 0
+  awk -v begin="$begin" -v end="$end" '
+    $0==begin {skip=1; next}
+    $0==end   {skip=0; next}
+    !skip
+  ' "$file" | sudo tee "${file}.tmp" >/dev/null && sudo mv "${file}.tmp" "$file"
+}
+
+upsert_block_sudo() {
+  local file="$1" begin="$2" end="$3" content="$4"
+  [ -f "$file" ] || sudo touch "$file"
+  remove_block_sudo "$file" "$begin" "$end"
+  {
+    printf "%s\n" "$begin"
+    printf "%s\n" "$content"
+    printf "%s\n" "$end"
+  } | sudo tee -a "$file" >/dev/null
+}
+
 # ----- End of bootstrap_common.sh -----
