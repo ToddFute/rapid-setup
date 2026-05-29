@@ -89,6 +89,9 @@ upsert_block "$ZSHRC" \
 
 # -------- QoL block --------
 QOL_BLOCK_CONTENT='
+# Emacs line editing (Ctrl-P/A/N history & motion; macOS zsh defaults to self-insert)
+bindkey -e
+
 export TERM=xterm-256color
 export LESS=-R
 export PAGER=less
