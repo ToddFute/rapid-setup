@@ -2,6 +2,7 @@
 # bootstrap_dev.sh — macOS-friendly developer bootstrap
 # - Installs VS Code (Homebrew cask)
 # - Installs MacVim/gvim (Homebrew formula)
+# - Installs GitHub CLI (gh)
 # - Ensures `code` CLI
 # - Installs VSCodeVim extension
 # - Optionally merges Vim-friendly settings via jq
@@ -158,6 +159,17 @@ export PAGER=less
   ok "QoL env block ensured in $rc"
 }
 
+# -------- GitHub CLI install --------
+install_gh() {
+  info "Installing / updating GitHub CLI (gh)…"
+  brew install gh >/dev/null 2>&1 || brew upgrade gh >/dev/null 2>&1 || true
+  if command -v gh >/dev/null 2>&1; then
+    ok "gh installed at $(command -v gh)."
+  else
+    warn "gh install finished, but gh is not on PATH yet. Open a new shell and try again."
+  fi
+}
+
 # -------- MacVim/gvim install --------
 install_gvim() {
   info "Installing / updating MacVim (provides gvim)…"
@@ -194,6 +206,7 @@ info "Developer bootstrap starting…"
 
 ensure_brew
 
+install_gh
 install_gvim
 
 info "Installing / updating VS Code (Homebrew cask)…"
