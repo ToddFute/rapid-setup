@@ -209,6 +209,14 @@ ensure_brew
 install_gh
 install_gvim
 
+VIM_BOOTSTRAP="$(dirname "${BASH_SOURCE[0]}")/bootstrap_vim.sh"
+if [ -x "$VIM_BOOTSTRAP" ]; then
+  info "Running Vim plugin bootstrap…"
+  "$VIM_BOOTSTRAP" || warn "bootstrap_vim.sh reported errors (continuing)."
+else
+  warn "bootstrap_vim.sh not found; skipping Pathogen bundles and ag install."
+fi
+
 info "Installing / updating VS Code (Homebrew cask)…"
 brew install --cask visual-studio-code >/dev/null || brew upgrade --cask visual-studio-code >/dev/null || true
 ok "VS Code installed."

@@ -33,7 +33,23 @@ if [ -d "$TMP_REPO/bin_rapid" ]; then
 fi
 
 if [ -d "$TMP_REPO/dotfiles" ]; then
-  cp -R "$TMP_REPO/dotfiles/"* "$HOME/" 2>/dev/null || true
+  # Dot-prefixed names in $HOME (repo files omit the leading dot)
+  for dotname in vimrc gvimrc vimrc.simplerose vimrc.local zshrc; do
+    if [ -f "$TMP_REPO/dotfiles/$dotname" ]; then
+      cp "$TMP_REPO/dotfiles/$dotname" "$HOME/.$dotname"
+    fi
+  done
+  if [ -f "$TMP_REPO/dotfiles/p10k.zsh" ]; then
+    cp "$TMP_REPO/dotfiles/p10k.zsh" "$HOME/.p10k.zsh"
+  fi
+  if [ -f "$TMP_REPO/dotfiles/aliases" ]; then
+    cp "$TMP_REPO/dotfiles/aliases" "$HOME/.aliases"
+  fi
+  if [ -d "$TMP_REPO/dotfiles/vim" ]; then
+    mkdir -p "$HOME/.vim"
+    cp -R "$TMP_REPO/dotfiles/vim/." "$HOME/.vim/"
+    echo "[✓] Installed ~/.vim from dotfiles/vim"
+  fi
 fi
 
 # Ensure executables have the right perms
