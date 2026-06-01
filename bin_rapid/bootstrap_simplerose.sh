@@ -5,7 +5,14 @@ set -euo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/lib/bootstrap_common.sh"
 
 SIMPLE_ROSE_LINK="$HOME/bin/SimpleRose"
-SIMPLE_ROSE_TARGET="/Users/toddbradfute/Library/CloudStorage/GoogleDrive-todd@simplerose.com/Other computers/My MacBook Pro/bin/SimpleRose"
+SIMPLE_ROSE_TARGET="$HOME/Library/CloudStorage/GoogleDrive-todd@simplerose.com/Other computers/My MacBook Pro/bin/SimpleRose"
+
+ICLOUD_DOCUMENTS="$HOME/Library/Mobile Documents/com~apple~CloudDocs/Documents"
+PERSONAL_ICLOUD="$ICLOUD_DOCUMENTS/Personal"
+PERSONAL_HOME="$HOME/Personal"
+PERSONAL_DOWNLOADS="$HOME/Downloads/Personal"
+ITERM2_SETTINGS_LINK="$HOME/iTerm2Settings"
+ITERM2_SETTINGS_TARGET="$ICLOUD_DOCUMENTS/iTerm2Settings"
 
 ensure_symlink() {
   local link="$1" target="$2"
@@ -42,6 +49,11 @@ fi
 
 section "Linking ~/bin/SimpleRose to Google Drive"
 ensure_symlink "$SIMPLE_ROSE_LINK" "$SIMPLE_ROSE_TARGET"
+
+section "Linking iCloud shortcuts"
+ensure_symlink "$PERSONAL_HOME" "$PERSONAL_ICLOUD"
+ensure_symlink "$PERSONAL_DOWNLOADS" "$PERSONAL_HOME"
+ensure_symlink "$ITERM2_SETTINGS_LINK" "$ITERM2_SETTINGS_TARGET"
 
 section "Adding SimpleRose to PATH in ~/.zshrc"
 PATH_BLOCK_CONTENT='
