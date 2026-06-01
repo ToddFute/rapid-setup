@@ -4,8 +4,13 @@ set -euo pipefail
 # shellcheck source=/dev/null
 . "$(dirname "${BASH_SOURCE[0]}")/lib/bootstrap_common.sh"
 
-SIMPLE_ROSE_LINK="$HOME/bin/SimpleRose"
-SIMPLE_ROSE_TARGET="/Users/toddbradfute/Library/CloudStorage/GoogleDrive-todd@simplerose.com/Other computers/My MacBook Pro/bin/SimpleRose"
+GOOGLE_DRIVE_ROOT="${HOME}/Library/CloudStorage/GoogleDrive-todd@simplerose.com"
+SIMPLE_ROSE_LINK="${HOME}/bin/SimpleRose"
+SIMPLE_ROSE_TARGET="${GOOGLE_DRIVE_ROOT}/Other computers/My MacBook Pro/bin/SimpleRose"
+NOTES_LINK="${HOME}/Notes"
+NOTES_TARGET="${GOOGLE_DRIVE_ROOT}/My Drive/Notes"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 ensure_symlink() {
   local link="$1" target="$2"
@@ -42,6 +47,18 @@ fi
 
 section "Linking ~/bin/SimpleRose to Google Drive"
 ensure_symlink "$SIMPLE_ROSE_LINK" "$SIMPLE_ROSE_TARGET"
+
+section "Linking ~/Notes to Google Drive"
+ensure_symlink "$NOTES_LINK" "$NOTES_TARGET"
+
+section "Installing ~/.vimrc.simplerose"
+VIMRC_SIMPLE_ROSE_SRC="${REPO_ROOT}/dotfiles/vimrc.simplerose"
+if [ -f "$VIMRC_SIMPLE_ROSE_SRC" ]; then
+  cp "$VIMRC_SIMPLE_ROSE_SRC" "${HOME}/.vimrc.simplerose"
+  ok "Installed ${HOME}/.vimrc.simplerose"
+else
+  warn "Not found: $VIMRC_SIMPLE_ROSE_SRC (run from rapid-setup repo checkout)"
+fi
 
 section "Adding SimpleRose to PATH in ~/.zshrc"
 PATH_BLOCK_CONTENT='

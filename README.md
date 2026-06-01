@@ -27,4 +27,4 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://gist.githubu
 ~/bin/rapid/bootstrap_vim.sh
 ```
 
-Optional: copy `dotfiles/vimrc.simplerose` to `~/.vimrc.simplerose` on work machines (sourced from `~/.vimrc`).
+On SimpleRose machines, run `~/bin/rapid/bootstrap_simplerose.sh` to link `~/Notes` and `~/bin/SimpleRose` to Google Drive and install `~/.vimrc.simplerose`.

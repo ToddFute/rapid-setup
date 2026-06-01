@@ -34,7 +34,7 @@ fi
 
 if [ -d "$TMP_REPO/dotfiles" ]; then
   # Dot-prefixed names in $HOME (repo files omit the leading dot)
-  for dotname in vimrc gvimrc vimrc.simplerose vimrc.local zshrc; do
+  for dotname in vimrc gvimrc vimrc.local zshrc; do
     if [ -f "$TMP_REPO/dotfiles/$dotname" ]; then
       cp "$TMP_REPO/dotfiles/$dotname" "$HOME/.$dotname"
     fi
