@@ -5,13 +5,27 @@ set -euo pipefail
 
 echo "[*] Running $(basename "$0") …"
 
+install_macos_comm_app() {
+  local cask="$1"
+  local app="$2"
+  local label="${app%.app}"
+
+  if [ -d "/Applications/$app" ]; then
+    ok "${label} already installed."
+    return 0
+  fi
+
+  info "Installing ${label}..."
+  brew install --cask "$cask" || warn "Could not install ${label}."
+}
+
 if on_macos; then
-  section "Installing communication apps (Slack, Signal, Session)"
+  section "Ensuring communication apps (Slack, Signal, Session)"
   need_cmd brew || fail "Homebrew not found; install brew first."
-  brew install --cask slack   || true
-  brew install --cask signal  || true
-  brew install --cask session || true
-  ok "Communication tools installed on macOS."
+  install_macos_comm_app slack   Slack.app
+  install_macos_comm_app signal  Signal.app
+  install_macos_comm_app session Session.app
+  ok "Communication tools bootstrap complete."
 
 elif on_linux; then
   section "Installing communication apps on Linux"
