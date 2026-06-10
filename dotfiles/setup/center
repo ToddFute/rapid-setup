@@ -1,0 +1,8 @@
+sleep 3
+cd ~/githome/simpleroseinc/ops-tools
+pushd ../solver-api
+pushd ../etf-api
+pushd ../securities-talend
+pushd ../rosette
+pushd ../security_check
+pushd ../runbook

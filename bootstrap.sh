@@ -50,6 +50,14 @@ if [ -d "$TMP_REPO/dotfiles" ]; then
     cp -R "$TMP_REPO/dotfiles/vim/." "$HOME/.vim/"
     echo "[✓] Installed ~/.vim from dotfiles/vim"
   fi
+  if [ -d "$TMP_REPO/dotfiles/setup" ]; then
+    for profile in "$TMP_REPO/dotfiles/setup"/*; do
+      if [ -f "$profile" ]; then
+        cp "$profile" "$HOME/.setup.$(basename "$profile")"
+      fi
+    done
+    echo "[✓] Installed terminal profile configs (~/.setup.*)"
+  fi
 fi
 
 # Ensure executables have the right perms
