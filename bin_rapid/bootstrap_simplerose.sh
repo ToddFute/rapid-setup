@@ -88,4 +88,21 @@ upsert_block "$HOME/.zshrc" \
   "$PATH_BLOCK_CONTENT"
 ok "PATH block ensured in ~/.zshrc"
 
+section "Installing SimpleRose cron entries"
+CRONTAB_SRC="${REPO_ROOT}/dotfiles/crontab.simplerose"
+CRONTAB_TMP="$(mktemp)"
+if [ -f "$CRONTAB_SRC" ]; then
+  crontab -l 2>/dev/null > "$CRONTAB_TMP" || true
+  CRONTAB_CONTENT="$(cat "$CRONTAB_SRC")"
+  upsert_block "$CRONTAB_TMP" \
+    "# >>> managed: simplerose-cron" \
+    "# <<< managed: simplerose-cron" \
+    "$CRONTAB_CONTENT"
+  crontab "$CRONTAB_TMP"
+  rm -f "$CRONTAB_TMP"
+  ok "Installed SimpleRose cron entries"
+else
+  warn "Not found: $CRONTAB_SRC (run from rapid-setup repo checkout)"
+fi
+
 ok "SimpleRose bootstrap complete."

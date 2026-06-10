@@ -1,0 +1,11 @@
+08 08 * * * /usr/local/bin/freshclam
+15 21 * * * $HOME/bin/SimpleRose/daily_cleanup.sh
+00 * 3 * * $HOME/bin/SimpleRose/weekly.sh /usr/local/bin/launch -p $HOME/usr/doc/WeeklyChores.txt
+15 10 * * 6 DATE=`date -j "+%Y-%m-%d"` sed -i .bak -E "s/[0-9]{4}-[0-9]{2}-[0-9]{2}/$DATE/" $HOME/usr/doc/MonthlyChores.txt
+@monthly $HOME/bin/SimpleRose/monthly.sh /usr/local/bin/launch -p $HOME/usr/doc/MonthlyChores.txt
+32 * * * * chmod u+x $HOME/bin/SimpleRose/* ; chmod u-x $HOME/bin/SimpleRose/*.{json,txt}
+
+# On Mondays, run over the last 3 days
+30 7 * * 1 GITHOME=$HOME/githome/simpleroseinc EDITOR=$HOME/bin/SimpleRose/gvim PATH=$HOME/.pyenv/shims:/usr/local/bin:$PATH $HOME/bin/SimpleRose/check_logs.sh 3
+# Tue-Fri, run over the last day
+30 7 * * 2-5 GITHOME=$HOME/githome/simpleroseinc EDITOR=$HOME/bin/SimpleRose/gvim PATH=$HOME/.pyenv/shims:/usr/local/bin:$PATH $HOME/bin/SimpleRose/check_logs.sh 1
