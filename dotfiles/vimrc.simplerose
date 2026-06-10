@@ -1,0 +1,38 @@
+" SimpleRose Vim macros (sourced from ~/.vimrc when present)
+
+" SimpleRose Daily Startup (Today)
+let @t = ':set noai
+1Gi=strftime("%Y%m%d")
+_Daily.txt
+:r~/bin/SimpleRose/daily.txt
+/include yesterday.sh Top
+!!yesterday.sh -i 0 Top
+/include yesterday.sh Carl
+!!yesterday.sh -i 4 Carl
+/include yesterday.sh Summary
+!!yesterday.sh Summary
+/include yesterday.sh Current
+!!yesterday.sh Current -exclude_file ~/bin/SimpleRose/daily.txt
+:set ai1Gy$:w ~/Notes/=strftime("%Y%m%d")
+_Daily.txt
+1G/*Todd: 
+'
+
+" Insert timestamp
+" WAS let @s = '!!date +\%H:\%M
+'
+let @s = 'o!!date +\%H:\%M
+0D?*Todd
+iTS=pa lr='
+
+" Mark non-personal todo's as forwarded to the next day
+let @d = ':1,$s/*Todd:/>Todd:/g
+:1,$s/>Todd: Personal/*Todd: Personal/g
+'
+
+" Pull past 2 week's personal work to today
+let @p = '!!yesterday.sh -14 Personal
+'
+
+" Take a screenshot of a fixed area and save it to ~/Notes with a date-stamp
+let @h = '!!take_screenshot.sh'
