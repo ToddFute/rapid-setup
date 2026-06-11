@@ -27,7 +27,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://gist.githubu
 ~/bin/rapid/bootstrap_vim.sh
 ```
 
-On SimpleRose machines, run `~/bin/rapid/bootstrap_simplerose.sh` to link `~/Notes`, `~/ZoomBG`, and `~/bin/SimpleRose` to Google Drive and install `~/.vimrc.simplerose`.
+On SimpleRose machines, run `~/bin/rapid/bootstrap_simplerose.sh` to link `~/Notes`, `~/ZoomBG`, and `~/bin/SimpleRose` to Google Drive, install `~/.vimrc.simplerose`, and merge cron entries from `dotfiles/crontab.simplerose` into your user crontab.
 
 ### Terminal profiles
 `bootstrap.sh` installs terminal window configs from `dotfiles/setup/` as `~/.setup.<name>`. Use the `lh` alias (from `~/.aliases`) to switch profiles — for example, `lh tl` loads `~/.setup.tl`, sets the terminal title, and restores that profile's command history.
