@@ -45,7 +45,7 @@ The defaults are set up for a new SimpleRose Mac. Bootstraps run in dependency o
 On SimpleRose machines, run `~/bin/rapid/bootstrap_simplerose.sh` to link `~/Notes`, `~/ZoomBG`, and `~/bin/SimpleRose` to Google Drive, install `~/.vimrc.simplerose`, and merge cron entries from `dotfiles/crontab.simplerose` into your user crontab.
 
 ### iTerm2 settings
-`~/bin/rapid/bootstrap_zsh.sh` links `~/iTerm2Settings` to `iCloud Drive/Documents/iTerm2Settings` and sets iTerm2 to load its settings from that folder (macOS only; skipped if the iCloud folder isn't there yet). Restart iTerm2 afterward.
+`~/bin/rapid/bootstrap_zsh.sh` installs iTerm2 with Homebrew if `/Applications/iTerm.app` isn't already there, then links `~/iTerm2Settings` to `iCloud Drive/Documents/iTerm2Settings` and sets iTerm2 to load its settings from that folder (macOS only; skipped if the iCloud folder isn't there yet). Restart iTerm2 afterward.
 
 ### Terminal profiles
 `bootstrap.sh` installs terminal window configs from `dotfiles/setup/` as `~/.setup.<name>`. Use the `lh` alias (from `~/.aliases`) to switch profiles — for example, `lh tl` loads `~/.setup.tl`, sets the terminal title, and restores that profile's command history.
