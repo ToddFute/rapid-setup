@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# rapid: order=110 default=on desc="SimpleRose Drive links, vimrc, PATH, cron"
 # bootstrap_simplerose.sh — SimpleRose workstation setup
 set -euo pipefail
 # shellcheck source=/dev/null

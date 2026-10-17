@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# rapid: order=100 default=off desc="Cloudflare VNC tunnel (interactive; needs ws)"
 # bootstrap_cf.sh - Set up Cloudflare Tunnel for VNC access on macOS
 #
 # Steps:

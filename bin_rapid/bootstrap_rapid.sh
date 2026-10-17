@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# rapid: order=120 default=off desc="Move repo to ~/githome, symlink ~/bin/rapid (maintainers)"
 # bootstrap_rapid.sh — install rapid-setup repo and link bin_rapid for local maintenance
 #
 # Expects a fresh clone at /tmp/rapid (or /tmp/rapid-setup from bootstrap.sh).

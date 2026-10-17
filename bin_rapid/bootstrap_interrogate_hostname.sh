@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# rapid: order=10 default=on desc="Rename this Mac (ComputerName/LocalHostName/HostName)"
 # bootstrap_interrogate_hostname.sh
 # Ask user for desired system name; update ComputerName, LocalHostName, HostName (macOS).
 # Also manages a /etc/hosts block safely & idempotently.

@@ -18,6 +18,21 @@ Or
 powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://gist.githubusercontent.com/<you>/<id>/raw/bootstrap.ps1 | iex"
 ```
 
+### Pick and run bootstraps
+After `bootstrap.sh`, run the checklist menu to choose which bootstraps to run:
+
+```bash
+~/bin/rapid/setup.sh        # menu: ↑/↓ or Tab move, Space toggle, Enter run
+~/bin/rapid/setup.sh -y     # skip the menu, run the defaults
+~/bin/rapid/setup.sh -n     # dry run: show the plan only
+```
+
+The defaults are set up for a new SimpleRose Mac. Bootstraps run in dependency order, and any that fail are listed in a summary at the end. Each `bootstrap_*.sh` sets its order, default and description on its second line:
+
+```bash
+# rapid: order=20 default=on desc="Homebrew, gh, MacVim, VS Code, Cursor (also runs vim)"
+```
+
 ### Vim (after bootstrap)
 `bootstrap.sh` installs `dotfiles/vim` into `~/.vim` and dot-prefixed vimrc files. For Pathogen bundles (CtrlP, ag.vim, Gundo) and the `ag` binary, run:
 

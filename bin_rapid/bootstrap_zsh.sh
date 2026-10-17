@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# rapid: order=40 default=on desc="Oh My Zsh, Powerlevel10k, iTerm2 settings"
 # bootstrap_zsh.sh — ensure Oh My Zsh, Powerlevel10k, syntax highlighting, functional plugin, and Pygments
 set -euo pipefail
 # shellcheck source=/dev/null

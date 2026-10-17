@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# rapid: order=20 default=on desc="Homebrew, gh, MacVim, VS Code, Cursor (also runs vim)"
 # bootstrap_dev.sh — macOS-friendly developer bootstrap
 # - Installs VS Code (Homebrew cask)
 # - Installs MacVim/gvim (Homebrew formula)

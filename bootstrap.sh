@@ -68,3 +68,4 @@ echo "[✓] Copied repo tools into $HOME/bin/rapid"
 # Keep TMP_REPO for inspection
 # ----------------------------------------------------------------------
 echo "[i] Temporary repo retained at $TMP_REPO (not removed)."
+echo "[i] Next: run ~/bin/rapid/setup.sh to pick which bootstraps to run."

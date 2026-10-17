@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# rapid: order=50 default=off desc="Node.js, npm, Yarn"
 set -euo pipefail
 # shellcheck source=/dev/null
 . "$(dirname "${BASH_SOURCE[0]}")/lib/bootstrap_common.sh"

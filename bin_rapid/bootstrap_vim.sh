@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# rapid: order=30 default=off desc="Vim Pathogen bundles + ag (already run by dev)"
 # bootstrap_vim.sh — pathogen bundles, Silver Searcher, and ~/.vim-tmp for backups
 set -euo pipefail
 # shellcheck source=/dev/null
