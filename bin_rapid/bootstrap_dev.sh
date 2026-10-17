@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# rapid: order=20 default=on desc="Homebrew, gh, MacVim, VS Code, Cursor (also runs vim)"
+# rapid: order=20 default=on desc="Homebrew, gh, Copilot CLI, MacVim, VS Code, Cursor (also runs vim)"
 # bootstrap_dev.sh — macOS-friendly developer bootstrap
 # - Installs VS Code (Homebrew cask)
 # - Installs MacVim/gvim (Homebrew formula)
 # - Installs GitHub CLI (gh) and offers to log it in
+# - Installs GitHub Copilot CLI (copilot)
 # - Ensures `code` CLI
 # - Installs VSCodeVim extension
 # - Optionally merges Vim-friendly settings via jq
@@ -185,6 +186,18 @@ install_gh() {
   fi
 }
 
+# -------- GitHub Copilot CLI install --------
+# Provides `copilot`, used by the ghcs/ghce shell functions in dotfiles/zshrc.
+# No upgrade: the cask is auto_updates.
+install_copilot_cli() {
+  if command -v copilot >/dev/null 2>&1; then
+    ok "Copilot CLI already installed."
+    return 0
+  fi
+  info "Installing GitHub Copilot CLI (Homebrew cask)…"
+  brew install --cask copilot-cli >/dev/null 2>&1 || warn "Could not install Copilot CLI."
+}
+
 # -------- MacVim/gvim install --------
 install_gvim() {
   info "Installing / updating MacVim (provides gvim)…"
@@ -222,6 +235,7 @@ info "Developer bootstrap starting…"
 ensure_brew
 
 install_gh
+install_copilot_cli
 install_gvim
 
 VIM_BOOTSTRAP="$(dirname "${BASH_SOURCE[0]}")/bootstrap_vim.sh"
