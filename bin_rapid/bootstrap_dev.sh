@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# rapid: order=20 default=on desc="Homebrew, gh, MacVim, VS Code, Cursor (also runs vim)"
+# rapid: order=20 default=on desc="Homebrew, gh, Copilot CLI, MacVim, VS Code, Cursor (also runs vim)"
 # bootstrap_dev.sh — macOS-friendly developer bootstrap
 # - Installs VS Code (Homebrew cask)
 # - Installs MacVim/gvim (Homebrew formula)
-# - Installs GitHub CLI (gh)
+# - Installs GitHub CLI (gh) and offers to log it in
+# - Installs GitHub Copilot CLI (copilot)
 # - Ensures `code` CLI
 # - Installs VSCodeVim extension
 # - Optionally merges Vim-friendly settings via jq
@@ -164,11 +165,37 @@ export PAGER=less
 install_gh() {
   info "Installing / updating GitHub CLI (gh)…"
   brew install gh >/dev/null 2>&1 || brew upgrade gh >/dev/null 2>&1 || true
-  if command -v gh >/dev/null 2>&1; then
-    ok "gh installed at $(command -v gh)."
-  else
+  if ! command -v gh >/dev/null 2>&1; then
     warn "gh install finished, but gh is not on PATH yet. Open a new shell and try again."
+    return 0
   fi
+  ok "gh installed at $(command -v gh)."
+
+  if gh auth status >/dev/null 2>&1; then
+    ok "gh already logged in to GitHub."
+  elif [ -t 0 ]; then
+    info "gh isn't logged in to GitHub. Log in now? (Y/n)"
+    read -r ans
+    if [[ "${ans:-Y}" =~ ^[Yy]$ ]]; then
+      gh auth login || warn "gh login didn't finish; run 'gh auth login' later."
+    else
+      warn "Skipped gh login; run 'gh auth login' when you're ready."
+    fi
+  else
+    warn "gh isn't logged in to GitHub; run 'gh auth login' to log in."
+  fi
+}
+
+# -------- GitHub Copilot CLI install --------
+# Provides `copilot`, used by the ghcs/ghce shell functions in dotfiles/zshrc.
+# No upgrade: the cask is auto_updates.
+install_copilot_cli() {
+  if command -v copilot >/dev/null 2>&1; then
+    ok "Copilot CLI already installed."
+    return 0
+  fi
+  info "Installing GitHub Copilot CLI (Homebrew cask)…"
+  brew install --cask copilot-cli >/dev/null 2>&1 || warn "Could not install Copilot CLI."
 }
 
 # -------- MacVim/gvim install --------
@@ -208,6 +235,7 @@ info "Developer bootstrap starting…"
 ensure_brew
 
 install_gh
+install_copilot_cli
 install_gvim
 
 VIM_BOOTSTRAP="$(dirname "${BASH_SOURCE[0]}")/bootstrap_vim.sh"

@@ -211,8 +211,24 @@ fi
 
 # Added by Windsurf
 export PATH="/Users/toddbradfute/.codeium/windsurf/bin:$PATH"
-alias ghcs="gh copilot suggest"
-alias ghce="gh copilot explain"
+# GitHub Copilot CLI. `gh copilot suggest/explain` no longer exist; these ask the
+# new `copilot` CLI (installed by bootstrap_dev.sh) the same thing, one-shot.
+# Uses the gh login unless GH_TOKEN is already set.
+unalias ghcs ghce 2>/dev/null
+_ghc() {
+  if ! command -v copilot >/dev/null 2>&1; then
+    echo "copilot not found; run ~/bin/rapid/bootstrap_dev.sh or: brew install --cask copilot-cli" >&2
+    return 1
+  fi
+  local token="${GH_TOKEN:-$(gh auth token 2>/dev/null)}"
+  if [[ -n "$token" ]]; then
+    GH_TOKEN="$token" copilot -p "$1"
+  else
+    copilot -p "$1"
+  fi
+}
+ghcs() { _ghc "Suggest a zsh command (macOS) for: $*. Reply with the command and a one-line explanation. Don't run it."; }
+ghce() { _ghc "Explain this shell command: $*"; }
 export GITHOME=~/githome/simpleroseinc
 
 # Use OpenAI (ChatGPT) with Aider

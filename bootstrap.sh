@@ -14,11 +14,11 @@ if [ -d "$TMP_REPO/.git" ]; then
 fi
 
 echo "[*] Cloning fresh copy..."
-if command -v gh >/dev/null 2>&1; then
-  gh repo clone ToddFute/rapid-setup "$TMP_REPO" -- --branch "$BRANCH" --depth=1
-else
-  git clone --depth=1 --branch "$BRANCH" "$REPO_URL" "$TMP_REPO"
-fi
+# Plain git: the repo is public, and gh would need a login before it can clone.
+git clone --depth=1 --branch "$BRANCH" "$REPO_URL" "$TMP_REPO" || {
+  echo "[✗] Could not clone $REPO_URL; nothing was installed." >&2
+  exit 1
+}
 
 echo "[✓] Repo ready at $TMP_REPO"
 
