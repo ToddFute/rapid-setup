@@ -33,6 +33,31 @@ else
     -o "$HOME/.iterm2_shell_integration.zsh" || warn "Could not install iTerm2 shell integration"
 fi
 
+# -------- iTerm2 settings from iCloud --------
+ITERM2_SETTINGS_LINK="$HOME/iTerm2Settings"
+ITERM2_SETTINGS_TARGET="$HOME/Library/Mobile Documents/com~apple~CloudDocs/Documents/iTerm2Settings"
+if ! on_macos; then
+  info "Not macOS; skipping iTerm2 settings."
+elif [ ! -d "$ITERM2_SETTINGS_TARGET" ]; then
+  warn "iCloud iTerm2Settings not found (not signed in or not synced yet); skipping: $ITERM2_SETTINGS_TARGET"
+elif [ -e "$ITERM2_SETTINGS_LINK" ] && [ ! -L "$ITERM2_SETTINGS_LINK" ]; then
+  warn "$ITERM2_SETTINGS_LINK exists but is not a symlink; skipping iTerm2 settings."
+else
+  if [ "$(readlink "$ITERM2_SETTINGS_LINK" 2>/dev/null || true)" = "$ITERM2_SETTINGS_TARGET" ]; then
+    info "iTerm2Settings symlink already correct."
+  else
+    rm -f "$ITERM2_SETTINGS_LINK"
+    ln -s "$ITERM2_SETTINGS_TARGET" "$ITERM2_SETTINGS_LINK"
+    ok "Linked $ITERM2_SETTINGS_LINK -> $ITERM2_SETTINGS_TARGET"
+  fi
+  defaults write com.googlecode.iterm2 PrefsCustomFolder -string "$ITERM2_SETTINGS_LINK"
+  defaults write com.googlecode.iterm2 LoadPrefsFromCustomFolder -bool true
+  ok "iTerm2 set to load settings from $ITERM2_SETTINGS_LINK"
+  if pgrep -xq iTerm2; then
+    warn "iTerm2 is running: quit and reopen it to load the iCloud settings."
+  fi
+fi
+
 # -------- Powerlevel10k theme --------
 if [ ! -d "$ZSH_DIR/custom/themes/powerlevel10k" ]; then
   info "Installing Powerlevel10k theme…"
