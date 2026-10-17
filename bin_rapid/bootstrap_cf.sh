@@ -198,27 +198,67 @@ install_service() {
   fi
 }
 
+screen_sharing_enabled() {
+  # First try: check the launchd service state (Ventura/Sonoma+)
+  if launchctl print system/com.apple.screensharing 2>/dev/null \
+      | grep -q 'state = running'; then
+    return 0
+  fi
+
+  # Fallback: check if something is listening on port 5900 (VNC)
+  if (netstat -an 2>/dev/null || ss -lan 2>/dev/null || lsof -iTCP:5900 -sTCP:LISTEN 2>/dev/null) \
+      | grep -q '\.5900'; then
+    return 0
+  fi
+
+  return 1
+}
+
 main() {
   ensure_macos
   ensure_cloudflared
 
+  # 1) Get current DNS-safe system name
   local system_name
   system_name="$(dns_safe_name)"
+
+  # 2) Prompt to change the macOS computer name at first setup
+  printf "Enter the new computer name (short, letters/numbers only) [%s]: " "$system_name"
+  IFS= read -r new_name
+
+  if [ -n "$new_name" ]; then
+    info "Setting macOS system name to '${new_name}' (HostName, LocalHostName, ComputerName)…"
+    # Best-effort; if any of these fail, we warn but continue.
+    if ! sudo scutil --set HostName "$new_name"; then
+      warn "Failed to set HostName; continuing with previous value."
+    fi
+    if ! sudo scutil --set LocalHostName "$new_name"; then
+      warn "Failed to set LocalHostName; continuing with previous value."
+    fi
+    if ! sudo scutil --set ComputerName "$new_name"; then
+      warn "Failed to set ComputerName; continuing with previous value."
+    fi
+    system_name="$new_name"
+  fi
+
+  # 3) Derive tunnel name and config dir from the (possibly updated) system_name
   local tunnel_name="${system_name}-remote"
   local config_dir="${HOME}/.cloudflared"
 
   info "Detected system name: ${system_name}"
   info "Tunnel will be named: ${tunnel_name}"
 
-  # Ask what FQDN to use; provide a sensible default.
+  # 4) Ask what FQDN to use; provide a sensible default based on system_name.
   local default_fqdn="${system_name}.your-domain.com"
-  printf "Enter the new computer name (short, letters/numbers only): "
+  printf "Hostname to use for this tunnel (FQDN) [%s]: " "$default_fqdn"
   IFS= read -r fqdn
   fqdn="${fqdn:-$default_fqdn}"
   ok "Using hostname: ${fqdn}"
 
   # Step 1: Guide user to enable Screen Sharing + VNC
-  open_sharing_pane
+  if ! screen_sharing_enabled; then
+    open_sharing_pane
+  fi
 
   # Step 2: Cloudflare auth
   cloudflared_login
