@@ -104,6 +104,23 @@ upsert_block() {
   } >> "$file"
 }
 
+# Strip blocks written by older rapid-setup versions whose markers the
+# current scripts no longer use (so upsert_block never replaced them):
+#   # >>> RAPID <NAME> START ... # >>> RAPID <NAME> END
+#   # >>> managed: /some/path ... # <<< managed
+#   # >>> managed: brew path  ... # <<< managed
+remove_legacy_blocks() {
+  local file="$1"
+  [ -f "$file" ] || return 0
+  awk '
+    /^# >>> RAPID [A-Z]+ START$/            {skip=1; next}
+    /^# >>> RAPID [A-Z]+ END$/              {skip=0; next}
+    /^# >>> managed: (\/.*|brew path)$/     {skip=1; next}
+    /^# <<< managed$/                       {skip=0; next}
+    !skip
+  ' "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
+}
+
 remove_block_sudo() {
   local file="$1" begin="$2" end="$3"
   [ -f "$file" ] || return 0
