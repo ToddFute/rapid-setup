@@ -102,32 +102,13 @@ upsert_block "$ZSHRC" \
   "# <<< managed: zsh-qol-defaults" \
   "$QOL_BLOCK_CONTENT"
 
-# -------- Theme setup --------
-THEME_BLOCK_CONTENT='
-ZSH_THEME="powerlevel10k/powerlevel10k"
-[[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
-'
-upsert_block "$ZSHRC" \
-  "# >>> managed: zsh-theme" \
-  "# <<< managed: zsh-theme" \
-  "$THEME_BLOCK_CONTENT"
-
-# -------- Load shell extras --------
-LOAD_BLOCK_CONTENT='
-# Load iTerm2 integration
-[[ -f ~/.iterm2_shell_integration.zsh ]] && source ~/.iterm2_shell_integration.zsh
-
-# Load functional plugin
-[[ -f ~/.zsh/functional/functional.plugin.zsh ]] && source ~/.zsh/functional/functional.plugin.zsh
-
-# Load syntax highlighting
-[[ -f /opt/homebrew/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ]] && \
-  source /opt/homebrew/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
-'
-upsert_block "$ZSHRC" \
-  "# >>> managed: zsh-loads" \
-  "# <<< managed: zsh-loads" \
-  "$LOAD_BLOCK_CONTENT"
+# -------- Remove duplicate loaders --------
+# dotfiles/zshrc already sets the theme and loads oh-my-zsh, iTerm2, the
+# functional plugin and syntax highlighting. Earlier versions of this script
+# (and older marker styles) appended second copies; strip them.
+remove_block "$ZSHRC" "# >>> managed: zsh-theme" "# <<< managed: zsh-theme"
+remove_block "$ZSHRC" "# >>> managed: zsh-loads" "# <<< managed: zsh-loads"
+remove_legacy_blocks "$ZSHRC"
 
 ok "Reloading ~/.zshrc…"
 # shellcheck disable=SC1090
