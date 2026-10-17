@@ -135,8 +135,7 @@ remove_block "$ZSHRC" "# >>> managed: zsh-theme" "# <<< managed: zsh-theme"
 remove_block "$ZSHRC" "# >>> managed: zsh-loads" "# <<< managed: zsh-loads"
 remove_legacy_blocks "$ZSHRC"
 
-ok "Reloading ~/.zshrc…"
-# shellcheck disable=SC1090
-source "$ZSHRC" || warn "Some startup warnings may appear on first load."
-
 ok "Zsh bootstrap complete."
+# This script runs under bash, which can't parse zsh syntax in ~/.zshrc, and a
+# child process can't reload the caller's shell anyway.
+info "Open a new terminal or run 'exec zsh' to load the updated ~/.zshrc."
