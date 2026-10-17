@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# rapid: order=40 default=on desc="Oh My Zsh, Powerlevel10k, iTerm2 settings"
+# rapid: order=40 default=on desc="Oh My Zsh, Powerlevel10k, iTerm2 app and settings"
 # bootstrap_zsh.sh — ensure Oh My Zsh, Powerlevel10k, syntax highlighting, functional plugin, and Pygments
 set -euo pipefail
 # shellcheck source=/dev/null
@@ -23,6 +23,20 @@ if [ ! -d "$ZSH_DIR" ]; then
     "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" || true
 else
   info "Oh My Zsh already installed."
+fi
+
+# -------- iTerm2 app --------
+# Skips on an existing /Applications/iTerm.app (even a non-Homebrew install, which
+# would make `brew install --cask` fail). No upgrade: the cask is auto_updates.
+if ! on_macos; then
+  info "Not macOS; skipping iTerm2 install."
+elif [ -d "/Applications/iTerm.app" ]; then
+  info "iTerm2 already installed."
+elif ! need_cmd brew; then
+  warn "Homebrew not found; skipping iTerm2 install."
+else
+  info "Installing iTerm2…"
+  brew install --cask iterm2 || warn "Could not install iTerm2"
 fi
 
 # -------- iTerm2 shell integration --------
