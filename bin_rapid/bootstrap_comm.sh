@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# rapid: order=70 default=on desc="Slack, Signal, Session"
 set -euo pipefail
 # shellcheck source=/dev/null
 . "$(dirname "${BASH_SOURCE[0]}")/lib/bootstrap_common.sh"

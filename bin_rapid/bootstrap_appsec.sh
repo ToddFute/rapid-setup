@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# rapid: order=60 default=off desc="TruffleHog, Gitleaks"
 set -euo pipefail
 # shellcheck source=/dev/null
 . "$(dirname "${BASH_SOURCE[0]}")/lib/bootstrap_common.sh"

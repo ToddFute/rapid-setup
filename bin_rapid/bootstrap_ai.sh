@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# rapid: order=80 default=off desc="Ollama, Aider, model pulls (large download)"
 set -euo pipefail
 # shellcheck source=/dev/null
 . "$(dirname "${BASH_SOURCE[0]}")/lib/bootstrap_common.sh"

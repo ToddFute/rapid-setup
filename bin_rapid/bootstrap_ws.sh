@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# rapid: order=90 default=on desc="cloudflared + 10-minute screen lock"
 set -euo pipefail
 # shellcheck source=/dev/null
 . "$(dirname "${BASH_SOURCE[0]}")/lib/bootstrap_common.sh"
